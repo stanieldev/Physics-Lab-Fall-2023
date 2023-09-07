@@ -2,6 +2,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import scipy.optimize as opt
+import scipy.stats as stats
 
 
 
@@ -55,31 +56,49 @@ class DataColumn:
     def __repr__(self) -> str:
         return f"DataColumn({self.name}, {self.var}, {self.unit})"
 
-
-
 class RegressionFunctions:
-    def squareroot(x,a,b,c):
-        return a*np.sqrt(x+c) + b
 
-    def linear(x,a,b):
-        return a*x + b
-    
-    def quadratic(x,a,b,c):
-        return a*x**2 + b*x + c
-    
-    def cubic(x,a,b,c,d):
-        return a*x**3 + b*x**2 + c*x + d
-    
-    def exponential(x,a,b,c):
-        return a*np.exp(b*x) + c
-    
-    def logarithmic(x,a,b,c):
-        return a*np.log(b*x) + c
-    
-    def power(x,a,b,c):
-        return a*x**b + c
+    class Linear():
+        def __eval__(x, a, b):
+            return a * x + b
+        def __form__() -> str:
+            return f"ax + b"
 
-
+    class Quadratic():
+        def __eval__(x, a, b, c):
+            return a * x**2 + b * x + c
+        def __form__() -> str:
+            return f"ax^2 + bx + c"
+        
+    class Cubic():
+        def __eval__(x, a, b, c, d):
+            return a * x**3 + b * x**2 + c * x + d
+        def __form__() -> str:
+            return f"ax^3 + bx^2 + cx + d"
+    
+    class SquareRoot():
+        def __eval__(x, a, b, c):
+            return a * np.sqrt(x + b) + c
+        def __form__() -> str:
+            return f"a\\sqrt(x + b) + c"
+    
+    class Exponential():
+        def __eval__(x, a, b, c):
+            return a * np.exp(b * x) + c
+        def __form__() -> str:
+            return f"a\\exp(b * x) + c"
+        
+    class Logarithmic():
+        def __eval__(x, a, b, c):
+            return a * np.log(b * x) + c
+        def __form__() -> str:
+            return f"a\\log(b * x) + c"
+        
+    class Power():
+        def __eval__(x, a, b, c):
+            return a * x**b + c
+        def __form__() -> str:
+            return f"ax^b + c"
 
 class ColumnFunctions:
     def add_constant(column: DataColumn, constant: float) -> DataColumn:
@@ -363,28 +382,35 @@ class Application:
         fig.ylabel(y_label)
         fig.title(title)
 
+
         # Regression
-        fig_params, covariance = opt.curve_fit(regression, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
-        fig.plot(dependent_column.data, regression(dependent_column.data, *fig_params), label = 'fit')
+        fig_params, covariance = opt.curve_fit(regression.__eval__, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
+        fig.plot(dependent_column.data, regression.__eval__(dependent_column.data, *fig_params), label = 'fit')
         
         # Calculate statistics
         fig_param_errors = np.sqrt(np.diag(covariance))
-        chi_squared = np.sum(((independent_column.data - regression(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
+        chi_squared = np.sum(((independent_column.data - regression.__eval__(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
         degrees_of_freedom = len(dependent_column.data) - len(fig_params)
         reduced_chi_squared = chi_squared / degrees_of_freedom
 
-        # Print statistics
-        [print(f"{fig_params[i]:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
-        print(f"chi-squared = {chi_squared:.3f}")
-        print(f"degrees of freedom = {degrees_of_freedom}")
-        print(f"reduced chi-squared = {reduced_chi_squared:.3f}")
-
         # Calculate r^2
-        residuals = independent_column.data - regression(dependent_column.data, *fig_params)
+        residuals = independent_column.data - regression.__eval__(dependent_column.data, *fig_params)
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
         r_squared = 1 - (ss_res / ss_tot)
-        print(f"r^2 = {r_squared:.3f}")
+
+        # Calculate p-values
+        p_value_chi_squared = 1 - stats.chi2.cdf(chi_squared, degrees_of_freedom)
+        p_value_r_squared = 1 - stats.f.cdf(r_squared, 1, degrees_of_freedom)
+
+        # Print statistics
+        print(f"Regression form: {regression.__form__()}")
+        [print(f"{fig_params[i]=:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
+        print(f"χ² = {chi_squared:.3f} (p={p_value_chi_squared*100}%)")
+        print(f"Degrees of Freedom = {degrees_of_freedom}")
+        print(f"Reduced χ² = {reduced_chi_squared:.3f}")
+        print(f"r² = {r_squared:.3f} (p={p_value_r_squared*100}%)")
+
 
         # Show figure
         fig.show()
