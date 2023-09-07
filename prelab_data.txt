@@ -1,0 +1,9 @@
+#NAME	Block Mass	Vertical Displacement
+#VAR	M	y
+#UNIT	g	cm
+10	8.5
+20	12.8
+30	17.3
+40	20.6
+50	24.6
+60	29.3

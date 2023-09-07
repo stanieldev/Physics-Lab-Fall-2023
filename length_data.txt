@@ -1,6 +1,6 @@
-#NAME	Length of Spring	Angular Frequency
-#VAR	x	w
-#UNIT	m	1/s
+#NAME	Length of String	5 Periods Time Interval
+#VAR	L	5T
+#UNIT	cm	s
 50	6.9
 50	7.03
 50	6.97
