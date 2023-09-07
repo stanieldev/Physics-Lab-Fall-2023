@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import scipy.optimize as opt
 import scipy.stats as stats
+from typing import Callable
 
 
 
@@ -58,43 +59,43 @@ class DataColumn:
 
 class RegressionFunctions:
 
-    class Linear():
+    class Linear:
         def __eval__(x, a, b):
             return a * x + b
         def __form__() -> str:
             return f"ax + b"
 
-    class Quadratic():
+    class Quadratic:
         def __eval__(x, a, b, c):
             return a * x**2 + b * x + c
         def __form__() -> str:
             return f"ax^2 + bx + c"
         
-    class Cubic():
+    class Cubic:
         def __eval__(x, a, b, c, d):
             return a * x**3 + b * x**2 + c * x + d
         def __form__() -> str:
             return f"ax^3 + bx^2 + cx + d"
     
-    class SquareRoot():
+    class SquareRoot:
         def __eval__(x, a, b, c):
             return a * np.sqrt(x + b) + c
         def __form__() -> str:
             return f"a\\sqrt(x + b) + c"
     
-    class Exponential():
+    class Exponential:
         def __eval__(x, a, b, c):
             return a * np.exp(b * x) + c
         def __form__() -> str:
             return f"a\\exp(b * x) + c"
         
-    class Logarithmic():
+    class Logarithmic:
         def __eval__(x, a, b, c):
             return a * np.log(b * x) + c
         def __form__() -> str:
             return f"a\\log(b * x) + c"
         
-    class Power():
+    class Power:
         def __eval__(x, a, b, c):
             return a * x**b + c
         def __form__() -> str:
@@ -149,6 +150,8 @@ class ColumnFunctions:
 
 
 class Application:
+
+    # Constructor
     def __init__(self) -> None:
         self.stored_data = []
         self.last_console_message = ""
@@ -156,24 +159,21 @@ class Application:
         self.AVAILABLE_REGESSIONS = [function for function in RegressionFunctions.__dict__.keys() if not function.startswith("_")]
     
     # Application columns
-    def _create_column(self, name: str, var: str, unit: str, data) -> DataColumn:
-        return DataColumn(name, var, unit, data)
-    
-    def _add_column(self, name: str, var: str, unit: str, data) -> None:
-        self.stored_data.append(self._create_column(name, var, unit, data))
+    def _append_column(self, column: DataColumn) -> None:
+        self.stored_data.append(column)
     
     def _remove_column(self, index: int) -> None:
         self.stored_data.pop(index)
     
-    def _modify_column(self, index: int, function, overwrite: bool) -> None:
+    def _modify_column(self, index: int, function: Callable, overwrite: bool) -> None:
         modified_column = function(self.stored_data[index])
         if overwrite:
             self.stored_data[index] = modified_column
         else:
-            self.stored_data.append(modified_column)
+            self._append_column(modified_column)
     
     def _request_column(self, index: int) -> DataColumn | None:
-        if index == -1:
+        if index == -1:  # No index given, manual override
             return None
         elif index >= len(self.stored_data) or index < 0:
             raise IndexError("Index out of range")
@@ -204,25 +204,30 @@ class Application:
     
         # Save data to application
         for name, var, unit, data in zip(names, variables, units, datum):
-            self._add_column(name, var, unit, data)
+            self._append_column(DataColumn(name, var, unit, data))
     
     def _export_data(self, path) -> None:
-        # TODO test with different size data columns
+
+        # Initialize lists
         names_list = []
         variables_list = []
         units_list = []
         data_list = []
+
+        # Populate lists
         for column in self.stored_data:
             names_list.append(column.name)
             variables_list.append(column.var)
             units_list.append(column.unit)
             data_list.append(column.data)
         
+        # Convert lists to tab separated columns
         names = "\t".join(names_list)
         variables = "\t".join(variables_list)
         units = "\t".join(units_list)
         data = "\n".join(["\t".join([str(x) for x in row]) for row in np.array(data_list).T])
 
+        # Write to file
         with open(path, "w") as f:
             f.write(f"#NAME\t{names}\n")
             f.write(f"#VAR\t{variables}\n")
@@ -238,13 +243,13 @@ class Application:
 
     def list_available_functions(self) -> None:
         print("Available functions:")
-        for i, function in enumerate(self.AVAILABLE_FUNCTIONS):
-            print(f"{i}: {function}")
+        for i, function_name in enumerate(self.AVAILABLE_FUNCTIONS):
+            print(f"{i}: {function_name}")
     
     def list_available_regressions(self) -> None:
         print("Available regressions:")
-        for i, function in enumerate(self.AVAILABLE_REGESSIONS):
-            print(f"{i}: {function}")
+        for i, regression_name in enumerate(self.AVAILABLE_REGESSIONS):
+            print(f"{i}: {regression_name}")
 
 
     # Querying
@@ -308,7 +313,7 @@ class Application:
         
         # Add column
         data = np.full(length, value)
-        self._add_column(name, var, unit, data)
+        self._append_column(DataColumn(name, var, unit, data))
         self.last_console_message = "Column added successfully!"
 
     def user_remove_column(self) -> None:
@@ -318,9 +323,11 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
 
-        # Remove column
+        # Query column
         self.list_available_columns()
         index = f_input("Enter column index to remove: ", int)
+
+        # Remove column
         self._remove_column(index)
         self.last_console_message = "Column removed successfully!"
 
@@ -331,19 +338,37 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
         
-        # Modify column
+        # Query column
         self.list_available_columns()
         index = f_input("Enter column index to modify: ", int)
+
+        # Query function
         function = self.user_query_function()
+
+        # Query overwrite
         overwrite = input("Overwrite column? (y/n) ")
         overwrite = bool(overwrite == "y")
+
+        # Modify column
         self._modify_column(index, function, overwrite)
         self.last_console_message = "Column modified successfully!"
 
     def user_import_data(self) -> None:
+
+        # Print instructions
         print("Drag and Drop the file you want to analyze into the terminal window and press enter")
-        path = input("Enter file path: ")
-        self._import_data(path)
+        
+        # Query path
+        while True:
+            try:
+                path = input("Enter file path: ")
+                self._import_data(path)
+                break
+            except FileNotFoundError:
+                print("Invalid path")
+                continue
+
+        # Print success
         self.last_console_message = "Data imported successfully!"
 
     def user_export_data(self) -> None:
@@ -353,9 +378,11 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
         
-        # Export data
+        # Query path
         print("Ender the file path you want to export to")
         path = input("Enter file path: ")
+
+        # Export data
         self._export_data(path)
         self.last_console_message = "Data exported successfully!"
 
