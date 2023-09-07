@@ -366,6 +366,25 @@ class Application:
         # Regression
         fig_params, covariance = opt.curve_fit(regression, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
         fig.plot(dependent_column.data, regression(dependent_column.data, *fig_params), label = 'fit')
+        
+        # Calculate statistics
+        fig_param_errors = np.sqrt(np.diag(covariance))
+        chi_squared = np.sum(((independent_column.data - regression(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
+        degrees_of_freedom = len(dependent_column.data) - len(fig_params)
+        reduced_chi_squared = chi_squared / degrees_of_freedom
+
+        # Print statistics
+        [print(f"{fig_params[i]:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
+        print(f"chi-squared = {chi_squared:.3f}")
+        print(f"degrees of freedom = {degrees_of_freedom}")
+        print(f"reduced chi-squared = {reduced_chi_squared:.3f}")
+
+        # Calculate r^2
+        residuals = independent_column.data - regression(dependent_column.data, *fig_params)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+        print(f"r^2 = {r_squared:.3f}")
 
         # Show figure
         fig.show()
