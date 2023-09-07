@@ -6,7 +6,6 @@ import scipy.stats as stats
 from typing import Callable
 
 
-
 # Extracts the names from a file
 def _find_names(path):
     KEY = "#NAME"
@@ -37,7 +36,10 @@ def _find_units(path):
 # Forces an input of a certain type
 def f_input(__prompt: object = "", variable_type=str):
     while True:
-        try: return variable_type(input(__prompt))
+        try: 
+            user = input(__prompt)
+            if user == "exit": raise ReturnToMenuException
+            else: return variable_type(user)
         except ValueError: 
             print("Invalid input")
             continue
@@ -46,7 +48,10 @@ def f_input(__prompt: object = "", variable_type=str):
 def clear_screen(): os.system("cls" if os.name == "nt" else "clear")
 
 
+# Return to menu exception
+class ReturnToMenuException(Exception): pass
 
+# Data column class
 class DataColumn:
     def __init__(self, name, var, unit, data) -> None:
         self.name = name
@@ -57,6 +62,7 @@ class DataColumn:
     def __repr__(self) -> str:
         return f"DataColumn({self.name}, {self.var}, {self.unit})"
 
+# Regression functions
 class RegressionFunctions:
 
     class Linear:
@@ -101,6 +107,7 @@ class RegressionFunctions:
         def __form__() -> str:
             return f"ax^b + c"
 
+# Column functions
 class ColumnFunctions:
     def add_constant(column: DataColumn, constant: float) -> DataColumn:
         return DataColumn(column.name, column.var, column.unit, column.data + constant)
@@ -147,8 +154,7 @@ class ColumnFunctions:
     def arctan(column: DataColumn) -> DataColumn:
         return DataColumn(f"arctan({column.name})", f"arctan({column.var})", f"arctan({column.unit})", np.arctan(column.data))
 
-
-
+# Application class
 class Application:
 
     # Constructor
@@ -180,8 +186,6 @@ class Application:
         else:
             return self.stored_data[index]
 
-
-    # Data IO
     def _import_data(self, path) -> None:
 
         # Validation check
@@ -235,7 +239,7 @@ class Application:
             f.write(data)
 
 
-    # Listing
+    # Console Listing
     def list_available_columns(self) -> None:
         print("Available columns:")
         for i, column in enumerate(self.stored_data):
@@ -252,45 +256,54 @@ class Application:
             print(f"{i}: {regression_name}")
 
 
-    # Querying
+    # User Querying
     def user_query_column(self, txt="Enter column index", display_list=False) -> DataColumn | None:
         if display_list: self.list_available_columns()
         while True:
-            index = f_input(txt, int)
             try:
+                index = f_input(txt, int)
                 return self._request_column(index)
             except IndexError:
                 print("Index out of range")
                 continue
+            except ReturnToMenuException:
+                raise ReturnToMenuException
 
     def user_query_function(self):
         self.list_available_functions()
-        index = f_input("Enter function index: ", int)
-        function = self.AVAILABLE_FUNCTIONS[index]
-        return getattr(ColumnFunctions, function)
+        try:
+            index = f_input("Enter function index: ", int)
+            function = self.AVAILABLE_FUNCTIONS[index]
+            return getattr(ColumnFunctions, function)
+        except ReturnToMenuException:
+            raise ReturnToMenuException
     
     def user_query_regression(self):
         self.list_available_regressions()
-        index = f_input("Enter regression index: ", int)
-        regression = self.AVAILABLE_REGESSIONS[index]
-        return getattr(RegressionFunctions, regression)
+        try:
+            index = f_input("Enter regression index: ", int)
+            regression = self.AVAILABLE_REGESSIONS[index]
+            return getattr(RegressionFunctions, regression)
+        except ReturnToMenuException:
+            raise ReturnToMenuException
 
     def user_query_scatterplot(self) -> tuple[DataColumn, DataColumn, DataColumn]:
 
-        # List columns
-        self.list_available_columns()
-
         # Query columns
-        dependent_column = self.user_query_column("Enter dependent column index: ")
-        independent_column = self.user_query_column("Enter independent column index: ")
-        query_error = self.user_query_column("Enter independent error column (-1 for manual): ")
+        try:
+            dependent_column = self.user_query_column("Enter dependent column index: ")
+            independent_column = self.user_query_column("Enter independent column index: ")
+            query_error = self.user_query_column("Enter independent error column (-1 for manual): ")
+        except ReturnToMenuException:
+            raise ReturnToMenuException
         
         # Manual error
         if query_error is None:
             error_name = f"Error of {independent_column.name}"
             error_var = f"d{independent_column.var}"
             error_unit = f"{independent_column.unit}"
-            error_value = f_input("Enter the error in the independent variable: ", float)
+            try: error_value = f_input("Enter the error in the independent variable: ", float)
+            except ReturnToMenuException: raise ReturnToMenuException
             error_data = np.full(len(independent_column.data), error_value)
             independent_error_column = DataColumn(error_name, error_var, error_unit, error_data)
             # self._add_column(error_name, error_var, error_unit, error_data)
@@ -302,14 +315,70 @@ class Application:
     
 
     # Console IO
+    def user_import_data(self) -> None:
+
+        # Print instructions
+        print("Import Data Protocol")
+        print("> Drag and Drop the file you want to analyze into the terminal window and press enter")
+        print("> Alternatively, you can enter the path to the file manually")
+        print("> Enter \"exit\" to go back to the menu\n")
+        
+        # Query path
+        while True:
+            try:
+                path = f_input("Enter file path: ", str)
+                self._import_data(path)
+                break
+            except FileNotFoundError as error:
+                print(f"[Console] {error}")
+                self.last_console_message = error
+                continue
+            except ValueError as error:
+                print(f"[Console] {error}")
+                self.last_console_message = error
+                continue
+            except ReturnToMenuException:
+                return
+
+        # Print success
+        self.last_console_message = "Data imported successfully!"
+
+    def user_export_data(self) -> None:
+
+        # Validation check
+        if len(self.stored_data) == 0:
+            self.last_console_message = "Stored data is empty!"
+            return
+        
+        # Print instructions
+        print("Export Data Protocol")
+        print("> Ender the file path you want to export to (\"exit\" to go back to menu)")
+        print("> Enter \"exit\" to go back to the menu\n")
+        
+        # Query path & export
+        try:
+            path = f_input("Enter file path: ", str)
+            self._export_data(path)
+            self.last_console_message = "Data exported successfully!"
+        except ReturnToMenuException:
+            return
+
     def user_add_column(self) -> None:
 
+        # Print instructions
+        print("Add Column Protocol")
+        print("> Enter the name, variable, unit, length, and value of the column you want to add")
+        print("> Enter \"exit\" to go back to the menu\n")
+
         # Query column
-        name = input("Enter column name: ")
-        var = input("Enter column variable: ")
-        unit = input("Enter column unit: ")
-        length = f_input("Enter column length: ", int)
-        value = f_input("Enter column value: ", float)
+        try:
+            name = f_input("Enter column name: ", str)
+            var = f_input("Enter column variable: ", str)
+            unit = f_input("Enter column unit: ", str)
+            length = f_input("Enter column length: ", int)
+            value = f_input("Enter column value: ", float)
+        except ReturnToMenuException:
+            return
         
         # Add column
         data = np.full(length, value)
@@ -323,14 +392,20 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
 
-        # Query column
+        # Print instructions
+        print("Remove Column Protocol")
+        print("> Enter the index of the column you want to remove")
+        print("> Enter \"exit\" to go back to the menu\n")
         self.list_available_columns()
-        index = f_input("Enter column index to remove: ", int)
 
-        # Remove column
-        self._remove_column(index)
-        self.last_console_message = "Column removed successfully!"
-
+        # Query column
+        try:
+            index = f_input("Enter column index to remove: ", int)
+            self._remove_column(index)
+            self.last_console_message = "Column removed successfully!"
+        except ReturnToMenuException:
+            return
+        
     def user_modify_column(self) -> None:
 
         # Validation check
@@ -338,53 +413,94 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
         
-        # Query column
+        # Print instructions
+        print("Modify Column Protocol")
+        print("> Enter the index of the column you want to modify")
+        print("> Enter \"exit\" to go back to the menu\n")
         self.list_available_columns()
-        index = f_input("Enter column index to modify: ", int)
+
+        # Query column
+        try:
+            index = f_input("Enter column index to modify: ", int)
+        except ReturnToMenuException:
+            return
 
         # Query function
         function = self.user_query_function()
 
         # Query overwrite
-        overwrite = input("Overwrite column? (y/n) ")
-        overwrite = bool(overwrite == "y")
+        try:
+            overwrite = input("Overwrite column? (y/n) ")
+            overwrite = bool(overwrite == "y")
+        except ReturnToMenuException:
+            return
 
         # Modify column
         self._modify_column(index, function, overwrite)
         self.last_console_message = "Column modified successfully!"
 
-    def user_import_data(self) -> None:
+    def user_list_column(self) -> None:
+
+        # Validation check
+        if len(self.stored_data) == 0:
+            self.last_console_message = "Stored data is empty!"
+            return
 
         # Print instructions
-        print("Drag and Drop the file you want to analyze into the terminal window and press enter")
+        print("List Column Protocol")
+        print("> Enter the index of the column you want to list")
+        print("> Enter \"exit\" to go back to the menu\n")
+        self.list_available_columns()
+
+        # Query column
+        try:
+            index = f_input("Enter column index to list: ", int)
+            column = self._request_column(index)
+        except ReturnToMenuException:
+            return
         
-        # Query path
-        while True:
-            try:
-                path = input("Enter file path: ")
-                self._import_data(path)
-                break
-            except FileNotFoundError:
-                print("Invalid path")
-                continue
+        # Print column
+        clear_screen()
+        print(f"Name: {column.name}")
+        print(f"Variable: {column.var}")
+        print(f"Unit: {column.unit}")
+        print(f"Data: {column.data}")
+        input("Press enter to continue...")
 
-        # Print success
-        self.last_console_message = "Data imported successfully!"
-
-    def user_export_data(self) -> None:
+    def user_plot_scatter(self) -> None:
 
         # Validation check
         if len(self.stored_data) == 0:
             self.last_console_message = "Stored data is empty!"
             return
         
-        # Query path
-        print("Ender the file path you want to export to")
-        path = input("Enter file path: ")
+        # Print instructions
+        print("Scatter Plot Protocol")
+        print("> Enter the index of the columns you want to plot")
+        print("> Enter \"exit\" to go back to the menu\n")
+        self.list_available_columns()
 
-        # Export data
-        self._export_data(path)
-        self.last_console_message = "Data exported successfully!"
+        # Query data
+        try:
+            dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
+        except ReturnToMenuException:
+            return
+
+        # Plot text objects
+        x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
+        y_label = f"{independent_column.var}({independent_column.unit})\n{independent_column.name}"
+        title = f"{independent_column.name} vs. {dependent_column.name}"
+
+        # Create plot
+        fig = plt
+        fig.errorbar(dependent_column.data, independent_column.data, yerr=independent_error_column.data, capsize=5, marker='o', linestyle='None')
+        fig.xlabel(x_label)
+        fig.ylabel(y_label)
+        fig.title(title)
+
+        # Show figure
+        fig.show()
+        self.last_console_message = "Scatter plot plotted successfully!"    
 
     def user_plot_regression(self) -> None:
 
@@ -393,9 +509,18 @@ class Application:
             self.last_console_message = "Stored data is empty!"
             return
         
+        # Print instructions
+        print("Scatter Plot w/ Regression Protocol")
+        print("> Enter the index of the columns you want to plot")
+        print("> Enter \"exit\" to go back to the menu\n")
+        self.list_available_columns()
+        
         # Query data
-        dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
-        regression = self.user_query_regression()
+        try:
+            dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
+            regression = self.user_query_regression()
+        except ReturnToMenuException:
+            return
 
         # Plot text objects
         x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
@@ -443,52 +568,56 @@ class Application:
         fig.show()
         self.last_console_message = "Regression plotted successfully!"
 
-    def user_plot_scatter(self) -> None:
-
+    def user_statistics(self) -> None:
+        
         # Validation check
         if len(self.stored_data) == 0:
             self.last_console_message = "Stored data is empty!"
             return
         
+        # Print instructions
+        print("Scatter Plot w/ Regression Protocol")
+        print("> Enter the index of the columns you want to plot")
+        print("> Enter \"exit\" to go back to the menu\n")
+        self.list_available_columns()
+        
         # Query data
-        dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
+        try:
+            dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
+            regression = self.user_query_regression()
+        except ReturnToMenuException:
+            return
 
         # Plot text objects
         x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
         y_label = f"{independent_column.var}({independent_column.unit})\n{independent_column.name}"
         title = f"{independent_column.name} vs. {dependent_column.name}"
 
-        # Create plot
-        fig = plt
-        fig.errorbar(dependent_column.data, independent_column.data, yerr=independent_error_column.data, capsize=5, marker='o', linestyle='None')
-        fig.xlabel(x_label)
-        fig.ylabel(y_label)
-        fig.title(title)
+        # Regression statistics
+        fig_params, covariance = opt.curve_fit(regression.__eval__, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
+        fig_param_errors = np.sqrt(np.diag(covariance))
+        residuals = independent_column.data - regression.__eval__(dependent_column.data, *fig_params)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+        p_value_r_squared = 1 - stats.f.cdf(r_squared, 1, degrees_of_freedom)
 
-        # Show figure
-        fig.show()
-        self.last_console_message = "Scatter plot plotted successfully!"
+        # Chi squared statistics
+        chi_squared = np.sum(((independent_column.data - regression.__eval__(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
+        degrees_of_freedom = len(dependent_column.data) - len(fig_params)
+        reduced_chi_squared = chi_squared / degrees_of_freedom
+        p_value_chi_squared = 1 - stats.chi2.cdf(chi_squared, degrees_of_freedom)
 
-    def user_list_column(self) -> None:
+        # Print statistics
+        print(f"Regression form: {regression.__form__()}")
+        [print(f"{fig_params[i]=:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
+        print(f"r² = {r_squared:.3f} (p={p_value_r_squared*100}%)")
+        print(f"χ² = {chi_squared:.3f} (p={p_value_chi_squared*100}%)")
+        print(f"Reduced χ² = {reduced_chi_squared:.3f}")
+        print(f"Degrees of Freedom = {degrees_of_freedom}")
 
-        # Validation check
-        if len(self.stored_data) == 0:
-            self.last_console_message = "Stored data is empty!"
-            return
-
-        # Query column
-        self.list_available_columns()
-        index = f_input("Enter column index to list: ", int)
-        column = self._request_column(index)
-        
-        # Print column
-        clear_screen()
-        print(f"Name: {column.name}")
-        print(f"Variable: {column.var}")
-        print(f"Unit: {column.unit}")
-        print(f"Data: {column.data}")
-        input("Press enter to continue...")
-
+        # Print success
+        self.last_console_message = "Regression plotted successfully!"
 
 
 # Main
@@ -511,7 +640,8 @@ def main():
         print("6: List Column")
         print("7: Plot Scatter")
         print("8: Plot Regression")
-        print("9: Quit")
+        print("9: Statistics")
+        print("0: Quit")
 
         # Get user input
         option = f_input("> ", int)
@@ -535,10 +665,11 @@ def main():
         elif option == 8:
             app.user_plot_regression()
         elif option == 9:
+            app.user_statistics()
+        elif option == 0:
             break
         else:
             print("Invalid option")
-
 
 # Main guard
 if __name__ == "__main__":
