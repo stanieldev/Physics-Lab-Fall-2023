@@ -1,6 +1,6 @@
 #NAME	Starting Angle	5 Periods of Swing
 #VAR	\theta	5T
-#UNIT	rad	s
+#UNIT	deg	s
 0	6.82
 0	6.74
 0	6.69

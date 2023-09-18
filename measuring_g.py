@@ -70,6 +70,12 @@ class RegressionFunctions:
             return a * x + b
         def __form__() -> str:
             return f"ax + b"
+    
+    class OnlySlopeLinear:
+        def __eval__(x, a):
+            return a * x
+        def __form__() -> str:
+            return f"ax"
 
     class Quadratic:
         def __eval__(x, a, b, c):
@@ -171,8 +177,8 @@ class Application:
     def _remove_column(self, index: int) -> None:
         self.stored_data.pop(index)
     
-    def _modify_column(self, index: int, function: Callable, overwrite: bool) -> None:
-        modified_column = function(self.stored_data[index])
+    def _modify_column(self, index: int, function: Callable, overwrite: bool, *function_args) -> None:
+        modified_column = function(self.stored_data[index], *function_args)
         if overwrite:
             self.stored_data[index] = modified_column
         else:
@@ -428,6 +434,17 @@ class Application:
         # Query function
         function = self.user_query_function()
 
+        # Query arguments
+        no_flags = ["square", "square_root", "log", "ln", "exp", "sin", "cos", "tan", "arcsin", "arccos", "arctan"]
+        try:
+            if function.__name__ in no_flags:
+                args = ""
+            else:
+                args = f_input("Enter additional arguments (separated by spaces): ", str).split(" ")
+                args = [float(arg) for arg in args]
+        except ReturnToMenuException:
+            return
+
         # Query overwrite
         try:
             overwrite = input("Overwrite column? (y/n) ")
@@ -436,7 +453,10 @@ class Application:
             return
 
         # Modify column
-        self._modify_column(index, function, overwrite)
+        if function.__name__ in no_flags:
+            self._modify_column(index, function, overwrite)
+        else:
+            self._modify_column(index, function, overwrite, *args)
         self.last_console_message = "Column modified successfully!"
 
     def user_list_column(self) -> None:
