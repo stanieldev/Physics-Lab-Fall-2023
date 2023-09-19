@@ -10,8 +10,16 @@ import math
 # Constants
 dTheta = 0.5 / 60  # sin(x) ~ x for small values of theta
 D = 1/600    # 600 lines per mm
-D = D*10**6  # Convert to nanometers
+D = D*10**6  # Convert to nanometers^-1
 
+# Color dictionary
+COLOR_INDEX_TO_HEX = {
+    "0": "#FFC0CB",  # Pink
+    "1": "#7d00db",  # Violet
+    "2": "#2800ff",  # Blue-Violet
+    "3": "#00efff",  # Blue-Green
+    "4": "#ff0000"   # Red
+}
 
 # Data point class
 class DataPoint:
@@ -21,10 +29,10 @@ class DataPoint:
         self.x_err = x_err
         self.y_err = y_err
         self.color = color
-    
     def __repr__(self) -> str:
         return f"DataPoint({self.x}, {self.y}, {self.x_err}, {self.y_err}, {self.color})"
 
+# Regression lines class
 class RegressionFunctions:
     class Linear:
         def __eval__(x, a):
@@ -36,41 +44,34 @@ class RegressionFunctions:
             return a * x + b
         def __form__() -> str:
             return f"ax + b"
-    class Constant:
-        def __eval__(x, a):
-            return a
-        def __form__() -> str:
-            return f"a"
+
+# Points class
+class Points:
+    def __init__(self, data):
+        # All data
+        self.data = data
+
+        # Sorted by color
+        self.Pink = self.data.transpose()[self.data.transpose()[:, 1] == 0]
+        self.Violet = self.data.transpose()[self.data.transpose()[:, 1] == 1]
+        self.Blue = self.data.transpose()[self.data.transpose()[:, 1] == 2]
+        self.Cyan = self.data.transpose()[self.data.transpose()[:, 1] == 3]
+        self.Red = self.data.transpose()[self.data.transpose()[:, 1] == 4]
 
 
-# Create color dictionary
-color_dict = {
-    "0": "#FFC0CB",  # Pink
-    "1": "#7d00db",  # Violet
-    "2": "#2800ff",  # Blue-Violet
-    "3": "#00efff",  # Blue-Green
-    "4": "#ff0000"   # Red
-}
 
 
 # Import data
-path = "C:\\Users\\sfg99\\Code\\modern-physics-statistics\\data.txt"
+path = "./atomic_spectra/manual_spectrometer.txt"
 data = np.loadtxt(path, unpack=True)
 
-# Do some data manipulation
+# Modify data to proper sets
 data[0] = data[0] + data[1]/60  # Add arc seconds to degrees
-data = np.delete(data, 1, 0)    # Remove arc seconds
-data[0] -= data[0][0]           # Set first angle to 0
+data = np.delete(data, 1, 0)    # Remove arc seconds column
+data[0] -= data[0][0]           # Set first angle to 0 degrees
 
-
-
-# Sort data into lists of points by color
-pink_points = data.transpose()[data.transpose()[:, 1] == 0]
-violet_points = data.transpose()[data.transpose()[:, 1] == 1]
-blue_violet_points = data.transpose()[data.transpose()[:, 1] == 2]
-blue_green_points = data.transpose()[data.transpose()[:, 1] == 3]
-red_points = data.transpose()[data.transpose()[:, 1] == 4]
-
+# Create all points lists
+POINTS = Points(data)
 
 # Create figure with 4 subplots in a 2x2 grid
 fig, ((ax1, ax3), (ax2, ax4)) = plt.subplots(2, 2)
@@ -81,22 +82,22 @@ fig.patch.set_facecolor('grey')
 
 
 # Plot the measured diffraction pattern
-def measured_diffraction_plot(plot: plt) -> None:
+def manually_measured_diffraction_plot(plot: plt) -> None:
 
     # Set up plot
     plot.get_yaxis().set_visible(False)
     plot.tick_params(axis='x', top=True, bottom=False, labeltop=True, labelbottom=False)
     plot.set_facecolor('black')
-    plot.title.set_text("Measured Atomic Spectrum of Hydrogen")
+    plot.title.set_text("Manually Measured Atomic Spectrum of Hydrogen")
 
     # Define points as lists
     diffraction_angles = data[0]
-    spectral_color = np.array([color_dict[str(int(i))] for i in data[1]])
+    spectral_color = np.array([COLOR_INDEX_TO_HEX[str(int(i))] for i in data[1]])
 
     # Plot lines
     [plot.axvline(x = angle, color = color, label = 'axvline - full height') for angle, color in zip(diffraction_angles, spectral_color)]
 
-measured_diffraction_plot(ax1)
+manually_measured_diffraction_plot(ax1)
 
 
 # Plot the theoretical diffraction pattern
@@ -115,27 +116,27 @@ def theoretical_diffraction_plot(plot: plt) -> None:
     red_wavelength = 656.3
 
     # Unrefracted lines
-    plot.axvline(x = 0, color = color_dict["0"], label = 'axvline - full height')
+    plot.axvline(x = 0, color = COLOR_INDEX_TO_HEX["0"], label = 'axvline - full height')
 
     # Violet lines
     violet_angles = [np.arcsin(violet_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/violet_wavelength) + 1)]
-    [plot.axvline(x = angle, color = color_dict["1"], label = 'axvline - full height') for angle in violet_angles]
-    [plot.axvline(x = -angle, color = color_dict["1"], label = 'axvline - full height') for angle in violet_angles]
+    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["1"], label = 'axvline - full height') for angle in violet_angles]
+    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["1"], label = 'axvline - full height') for angle in violet_angles]
 
     # Blue-Violet lines
     blue_violet_angles = [np.arcsin(blue_violet_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/blue_violet_wavelength) + 1)]
-    [plot.axvline(x = angle, color = color_dict["2"], label = 'axvline - full height') for angle in blue_violet_angles]
-    [plot.axvline(x = -angle, color = color_dict["2"], label = 'axvline - full height') for angle in blue_violet_angles]
+    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["2"], label = 'axvline - full height') for angle in blue_violet_angles]
+    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["2"], label = 'axvline - full height') for angle in blue_violet_angles]
 
     # Blue-Green lines
     blue_green_angles = [np.arcsin(blue_green_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/blue_green_wavelength) + 1)]
-    [plot.axvline(x = angle, color = color_dict["3"], label = 'axvline - full height') for angle in blue_green_angles]
-    [plot.axvline(x = -angle, color = color_dict["3"], label = 'axvline - full height') for angle in blue_green_angles]
+    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["3"], label = 'axvline - full height') for angle in blue_green_angles]
+    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["3"], label = 'axvline - full height') for angle in blue_green_angles]
 
     # Red lines
     red_angles = [np.arcsin(red_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/red_wavelength) + 1)]
-    [plot.axvline(x = angle, color = color_dict["4"], label = 'axvline - full height') for angle in red_angles]
-    [plot.axvline(x = -angle, color = color_dict["4"], label = 'axvline - full height') for angle in red_angles]
+    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["4"], label = 'axvline - full height') for angle in red_angles]
+    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["4"], label = 'axvline - full height') for angle in red_angles]
 
 theoretical_diffraction_plot(ax2)
 
@@ -151,17 +152,17 @@ def sine_angle_vs_diffraction_order(plot: plt) -> None:
     # Define points as lists
     sine_diffraction_angle = np.sin(data[:, 0] * np.pi / 180)
     diffraction_order = data[:, 2]
-    spectral_color = [matplotlib.colors.to_rgb(color_dict[str(int(i))]) for i in data[1]]
+    spectral_color = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in data[1]]
 
     # Plot points by color
-    plot.errorbar(x = 0, y = 0, yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict[str(int(0))]), marker = 'o', linestyle = 'None')
+    plot.errorbar(x = 0, y = 0, yerr=dTheta, color = matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(0))]), marker = 'o', linestyle = 'None')
     # [plot.errorbar(x = order, y = sine_angle, yerr=dTheta, color = color, marker = 'o', linestyle = 'None') for order, sine_angle, color in zip(diffraction_order, sine_diffraction_angle, spectral_color)]
 
     # Plot each wavelength of light
-    plot_sine_dataset(plot, violet_points, "Violet")
-    plot_sine_dataset(plot, blue_violet_points, "Blue-Violet")
-    plot_sine_dataset(plot, blue_green_points, "Blue-Green")
-    plot_sine_dataset(plot, red_points, "Red")
+    plot_sine_dataset(plot, POINTS.Violet, "Violet")
+    plot_sine_dataset(plot, POINTS.Blue, "Blue-Violet")
+    plot_sine_dataset(plot, POINTS.Cyan, "Blue-Green")
+    plot_sine_dataset(plot, POINTS.Red, "Red")
     plot.legend()
 
 saved_data = []
@@ -170,7 +171,7 @@ def plot_sine_dataset(plot: plt, datum, color_str: str = None) -> tuple:
     # Define points as lists
     sine_diffraction_angle = np.sin(datum[:, 0] * np.pi / 180)
     diffraction_order = datum[:, 2]
-    spectral_color = [matplotlib.colors.to_rgb(color_dict[str(int(i))]) for i in datum[:, 1]]
+    spectral_color = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in datum[:, 1]]
 
     # Plot points by color
     [plot.errorbar(x = order, y = sine_angle, yerr=dTheta, color = color, marker = 'o', linestyle = 'None') for order, sine_angle, color in zip(diffraction_order, sine_diffraction_angle, spectral_color)]
@@ -180,7 +181,7 @@ def plot_sine_dataset(plot: plt, datum, color_str: str = None) -> tuple:
     param_errors = np.sqrt(np.diag(covariance))
 
     # Plot regression line
-    plot.plot(diffraction_order, RegressionFunctions.Linear.__eval__(diffraction_order, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}", color = color_dict[str(int(datum[0, 1]))])
+    plot.plot(diffraction_order, RegressionFunctions.Linear.__eval__(diffraction_order, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}", color = COLOR_INDEX_TO_HEX[str(int(datum[0, 1]))])
 
     # Calculate statistics
     residuals = sine_diffraction_angle - RegressionFunctions.Linear.__eval__(diffraction_order, *params)
@@ -210,19 +211,21 @@ def wavelength_plot(plot: plt) -> None:
     
     # Set up plot
     plot.set_xlabel("Wavelength (nm)")
+    plot.get_yaxis().set_visible(False)
 
     # Define points as lists
     wavelengths = np.array([i[0] for i in saved_data])
     errors = np.array([i[1] for i in saved_data])
-    colors = [matplotlib.colors.to_rgb(color_dict[str(int(i))]) for i in range(1, 5)]
+    colors = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in range(1, 5)]
 
     # Plot lines by color
-    [plot.axvline(x = wavelength, color = color, label = 'axvline - full height') for wavelength, error, color in zip(wavelengths, errors, colors)]
+    [plot.axvline(x = wavelength, color = color, label = 'axvline - full height') for wavelength, color in zip(wavelengths, colors)]
     [plot.errorbar(x = wavelength, y = 0, xerr=error, color = color, marker = None, linestyle = 'None') for wavelength, error, color in zip(wavelengths, errors, colors)]
+    [plot.axvline(x = wavelength + error, color = color, label = 'axvline - full height', linestyle='dashed') for wavelength, error, color in zip(wavelengths, errors, colors)]
+    [plot.axvline(x = wavelength - error, color = color, label = 'axvline - full height', linestyle='dashed') for wavelength, error, color in zip(wavelengths, errors, colors)]
 
 
-wavelength_plot(ax4)
-
+# wavelength_plot(ax4)
 
 
 def rydberg_constant(plot: plt):
@@ -263,12 +266,14 @@ def rydberg_constant(plot: plt):
     r_squared = math.floor(r_squared * 10000) / 10000
 
     # Print statistics
+    RD = 0.0109737316
     print(f"Rydberg Statistics:")
-    print(f"$R_H$ +/- δ$R_H$ = {-params[0]:.3f}nm^-1 +/- {param_errors[0]:.3f}nm^-1")
-    print(f"$R_H$ +/- δ$R_H$ = {4*params[1]:.3f}nm^-1 +/- {4*param_errors[1]:.3f}nm^-1")
+    print(f"s +/- δs = {-params[0]:.4f}nm^-1 +/- {-param_errors[0]:.4f}nm^-1")
+    print(f"b +/- δb = {4*params[1]:.4f}nm^-1 +/- {4*param_errors[1]:.4f}nm^-1")
     print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
+    print((-params[0] - RD)/(-param_errors[0]))
 
-#rydberg_constant(ax4)
+rydberg_constant(ax4)
 
 
 
