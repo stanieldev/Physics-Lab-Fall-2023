@@ -69,10 +69,13 @@ def iterate_one_step(data):
 data = np.loadtxt('./atomic_spectra/hydrogen_lights_on_low_saturation.txt', skiprows=1)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Iterate through the data
 for i in range(30):
     iterate_one_step(data)
 =======
+=======
+>>>>>>> parent of acae494 (Update atomic_spectra_2.py)
 # Plot high saturation data
 plt.figure()
 plt.plot(high_on[:,0], high_on[:,1], label='on')
@@ -189,5 +192,9 @@ def double_plot_around_region(data, wavelength1, wavelength2):
     plt.show()
 
 
+<<<<<<< HEAD
+double_plot_around_region(high_on, 651, 656)
+>>>>>>> parent of acae494 (Update atomic_spectra_2.py)
+=======
 double_plot_around_region(high_on, 651, 656)
 >>>>>>> parent of acae494 (Update atomic_spectra_2.py)
