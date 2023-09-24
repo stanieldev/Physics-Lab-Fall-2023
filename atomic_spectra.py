@@ -107,7 +107,7 @@ def theoretical_diffraction_plot(plot: plt) -> None:
     plot.get_yaxis().set_visible(False)
     plot.set_facecolor('black')
     plot.title.set_text("Theoretical Atomic Spectrum of Hydrogen")
-    plot.get_shared_x_axes().join(plot, ax1)
+    # plot.get_shared_x_axes().join(plot, ax1)
 
     # Known wavelengths of light
     violet_wavelength = 410.2
@@ -271,9 +271,58 @@ def rydberg_constant(plot: plt):
     print(f"s +/- δs = {-params[0]:.4f}nm^-1 +/- {-param_errors[0]:.4f}nm^-1")
     print(f"b +/- δb = {4*params[1]:.4f}nm^-1 +/- {4*param_errors[1]:.4f}nm^-1")
     print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
-    print((-params[0] - RD)/(-param_errors[0]))
+    print((-params[0] - RD)/RD)
+
+def machine_rydberg_constant(plot: plt):
+
+    # Set up plot
+    plot.set_xlabel("1/n²")
+    plot.set_ylabel("1 / Wavelength (nm^-1)")
+
+    # Define points as lists
+    x_list = [3,4,5,6]
+    y_list = [660.109, 485.983, 434.049, 410.196]
+    y_error = [0.126, 0.025, 0.005, 0.033]
+
+    # Modify data
+    x_list = np.array([1 / (i**2) for i in x_list])
+    y_error = np.array([i / j**2 for i, j in zip(y_error, y_list)])
+    y_list = np.array([1 / i for i in y_list])
+
+    # Plot points
+    plot.errorbar(x_list, y_list, yerr=y_error, marker = 'o', linestyle = 'None')
+
+    # Calculate regression
+    params, covariance = opt.curve_fit(RegressionFunctions.FullLinear.__eval__, x_list, y_list, sigma=y_error)
+    param_errors = np.sqrt(np.diag(covariance))
+
+    # Plot regression line
+    plot.plot(x_list, RegressionFunctions.FullLinear.__eval__(x_list, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}")
+
+    # Calculate statistics
+    residuals = y_list - RegressionFunctions.FullLinear.__eval__(x_list, *params)
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((y_list - np.mean(y_list))**2)
+
+    # Calculate probabilities
+    r_squared = 1 - (ss_res / ss_tot)
+
+    # Prepare for printing
+    r_squared = math.floor(r_squared * 10000) / 10000
+
+    # Print statistics
+    RD = 0.0109737316
+    print(f"Rydberg Statistics:")
+    print(f"s +/- δs = {params[0]:.4f}nm^-1 +/- {param_errors[0]:.4f}nm^-1")
+    print(f"b +/- δb = {params[1]:.4f}nm^-1 +/- {param_errors[1]:.4f}nm^-1")
+    print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
+    print((-params[0] - RD)/RD)
+
 
 rydberg_constant(ax4)
+
+
+
 
 
 
