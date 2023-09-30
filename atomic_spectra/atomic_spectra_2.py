@@ -84,4 +84,4 @@ def plot_around_region(data, wavelength):
 
 
 
-plot_around_region(med_on, 656)
+plot_around_region(low_on, 656)
