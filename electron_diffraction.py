@@ -108,9 +108,6 @@ def compiled_data_to_corrected_data() -> None:
 # Corrected to wavelengths data
 def corrected_data_to_wavelengths_data() -> None:
 
-    # Constants
-    
-
     # Import data
     path = "./electron_diffraction/corrected_data.txt"
     data = np.loadtxt(path, unpack=True)
