@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import odr
+from scipy.stats import t as studentt
 
 # Constants
 R = 66   # mm
@@ -11,8 +13,6 @@ d11 = 0.123  # nm
 d10 = 0.213  # nm
 K = 1.227  # V^1/2 nm
 
-
-# raw -> compiled -> corrected -> diffraction wavelength 
 
 
 # Raw to compiled data
@@ -107,6 +107,10 @@ def compiled_data_to_corrected_data() -> None:
 
 # Corrected to wavelengths data
 def corrected_data_to_wavelengths_data() -> None:
+
+    # Constants
+    
+
     # Import data
     path = "./electron_diffraction/corrected_data.txt"
     data = np.loadtxt(path, unpack=True)
@@ -141,56 +145,144 @@ def corrected_data_to_wavelengths_data() -> None:
 
 
 
-# Load data
-path = "./electron_diffraction/wavelengths_data.txt"
-data = np.loadtxt(path, unpack=True)
+# Plot wavelength vs voltage
+def plot_wavelength_vs_voltage() -> None:
 
-# Unpacking data
-kV = data[0]
-λDEB, λDEB_err = data[1], data[2]
-λSRI, λSRI_err = data[3], data[4]
-λSRM, λSRM_err = data[5], data[6]
-λLRI, λLRI_err = data[7], data[8]
-λLRM, λLRM_err = data[9], data[10]
+    # Import data
+    path = "./electron_diffraction/wavelengths_data.txt"
+    data = np.loadtxt(path, unpack=True)
 
-# Plot Wavelength vs Voltage
-plt.title("Electron Diffraction")
-plt.xlabel("Voltage (kV)")
-plt.ylabel("Wavelength (nm)")
-plt.errorbar(kV, λSRI, yerr=λSRI_err, fmt=".", label="SRI")
-plt.errorbar(kV, λSRM, yerr=λSRM_err, fmt=".", label="SRM")
-plt.errorbar(kV, λLRI, yerr=λLRI_err, fmt=".", label="LRI")
-plt.errorbar(kV, λLRM, yerr=λLRM_err, fmt=".", label="LRM")
-x = np.linspace(2, 5, 300)
-plt.plot(x, K / (1000*x)**0.5, label="DeBroglie")
-plt.legend()
-plt.show()
+    # Unpacking data
+    kV = data[0]
+    λSRI, λSRI_err = data[3], data[4]
+    λSRM, λSRM_err = data[5], data[6]
+    λLRI, λLRI_err = data[7], data[8]
+    λLRM, λLRM_err = data[9], data[10]
+
+    # Initialize plot
+    plt.title("Electron Diffraction")
+    plt.xlabel("Voltage (kV)")
+    plt.ylabel("Wavelength (nm)")
+    plt.xlim(1.875, 5.125)
+    x = np.linspace(1.875, 5.125, 500)
+
+    # Plot λ vs Voltage
+    plt.errorbar(kV, λSRI, yerr=λSRI_err, fmt=".", label="SRI", capsize=5, capthick=1)
+    plt.errorbar(kV, λSRM, yerr=λSRM_err, fmt=".", label="SRM", capsize=5, capthick=1)
+    plt.errorbar(kV, λLRI, yerr=λLRI_err, fmt=".", label="LRI", capsize=5, capthick=1)
+    plt.errorbar(kV, λLRM, yerr=λLRM_err, fmt=".", label="LRM", capsize=5, capthick=1)
+    plt.plot(x, K / (1000*x)**0.5, label="DeBroglie")
+    
+    # Finalize plot
+    plt.legend()
 
 # Plot 1/λ² vs Voltage
-plt.title("Electron Diffraction")
-plt.xlabel("Voltage (kV)")
-plt.ylabel("1/λ² (nm⁻²)")
-plt.errorbar(kV, 1/λSRI**2, yerr=(2*λSRI_err/λSRI**3), fmt=".", label="SRI")
-plt.errorbar(kV, 1/λSRM**2, yerr=(2*λSRM_err/λSRM**3), fmt=".", label="SRM")
-plt.errorbar(kV, 1/λLRI**2, yerr=(2*λLRI_err/λLRI**3), fmt=".", label="LRI")
-plt.errorbar(kV, 1/λLRM**2, yerr=(2*λLRM_err/λLRM**3), fmt=".", label="LRM")
-x = np.linspace(2, 5, 300)
-plt.plot(x, (K / (1000*x)**0.5)**(-2), label="DeBroglie")
-plt.legend()
+def plot_inverse_wavelength_squared_vs_voltage() -> None:
+    
+    # Import data
+    path = "./electron_diffraction/wavelengths_data.txt"
+    data = np.loadtxt(path, unpack=True)
+
+    # Unpacking data
+    kV = data[0]
+    λSRI, λSRI_err = data[3], data[4]
+    λSRM, λSRM_err = data[5], data[6]
+    λLRI, λLRI_err = data[7], data[8]
+    λLRM, λLRM_err = data[9], data[10]
+
+    # Initialize plot
+    plt.title("Electron Diffraction")
+    plt.xlabel("Voltage (kV)")
+    plt.ylabel("1/λ² (nm⁻²)")
+    plt.xlim(1.875, 5.125)
+    x = np.linspace(1.875, 5.125, 500)
+
+    # Plot 1/λ² vs Voltage
+    plt.errorbar(kV, 1/λSRI**2, yerr=(2*λSRI_err/λSRI**3), fmt=".", label="SRI", capsize=5, capthick=1)
+    plt.errorbar(kV, 1/λSRM**2, yerr=(2*λSRM_err/λSRM**3), fmt=".", label="SRM", capsize=5, capthick=1)
+    plt.errorbar(kV, 1/λLRI**2, yerr=(2*λLRI_err/λLRI**3), fmt=".", label="LRI", capsize=5, capthick=1)
+    plt.errorbar(kV, 1/λLRM**2, yerr=(2*λLRM_err/λLRM**3), fmt=".", label="LRM", capsize=5, capthick=1)
+    plt.plot(x, (K / (1000*x)**0.5)**(-2), label="DeBroglie")
+
+    # Finalize plot
+    plt.legend()
+
+# Plot Bragg Wavelength vs DeBroglie Wavelength
+def plot_bragg_wavelength_vs_debroglie_wavelength() -> None:
+
+    # Import data
+    path = "./electron_diffraction/wavelengths_data.txt"
+    data = np.loadtxt(path, unpack=True)
+
+    # Unpacking data
+    λDEB, λDEB_err = data[1], data[2]
+    λSRI, λSRI_err = data[3], data[4]
+    λSRM, λSRM_err = data[5], data[6]
+    λLRI, λLRI_err = data[7], data[8]
+    λLRM, λLRM_err = data[9], data[10]
+
+    # Initialize plot
+    plt.title("Electron Diffraction")
+    plt.xlabel("DeBroglie Wavelength (nm)")
+    plt.ylabel("Bragg Wavelength (nm)")
+    plt.xlim(0.016, 0.029)
+    x = np.linspace(0.016, 0.029, 500)
+
+    # Calculate the ODRs of bragg wavelength vs debroglie wavelength
+    odr_SRI = perform_odr(λDEB, λSRI, λDEB_err, λSRI_err)
+    odr_SRM = perform_odr(λDEB, λSRM, λDEB_err, λSRM_err)
+    odr_LRI = perform_odr(λDEB, λLRI, λDEB_err, λLRI_err)
+    odr_LRM = perform_odr(λDEB, λLRM, λDEB_err, λLRM_err)
+
+    # Calculate the t-statistic
+    t_SRI = (odr_SRI.beta[0] - 1) / odr_SRI.sd_beta[0]
+    t_SRM = (odr_SRM.beta[0] - 1) / odr_SRM.sd_beta[0]
+    t_LRI = (odr_LRI.beta[0] - 1) / odr_LRI.sd_beta[0]
+    t_LRM = (odr_LRM.beta[0] - 1) / odr_LRM.sd_beta[0]
+    
+    # Calculate the p-value
+    p_SRI = studentt.sf(np.abs(t_SRI), len(λDEB)-1)*2
+    p_SRM = studentt.sf(np.abs(t_SRM), len(λDEB)-1)*2
+    p_LRI = studentt.sf(np.abs(t_LRI), len(λDEB)-1)*2
+    p_LRM = studentt.sf(np.abs(t_LRM), len(λDEB)-1)*2
+
+    # Plot Bragg Wavelength vs DeBroglie Wavelength
+    def f(p): return f"{np.floor(p*100*1000)/1000}%" if p > 0.001 else "<0.001%"
+    plt.errorbar(λDEB, λSRI, xerr=λDEB_err, yerr=λSRI_err, fmt=".", label=f"SRI (p={f(p_SRI)})", capsize=5, capthick=1, color="orange")
+    plt.errorbar(λDEB, λSRM, xerr=λDEB_err, yerr=λSRM_err, fmt=".", label=f"SRM (p={f(p_SRM)})", capsize=5, capthick=1, color="green")
+    plt.errorbar(λDEB, λLRI, xerr=λDEB_err, yerr=λLRI_err, fmt=".", label=f"LRI (p={f(p_LRI)})", capsize=5, capthick=1, color="red")
+    plt.errorbar(λDEB, λLRM, xerr=λDEB_err, yerr=λLRM_err, fmt=".", label=f"LRM (p={f(p_LRM)})", capsize=5, capthick=1, color="blue")
+    plt.plot(x, x, label="DeBroglie")
+
+    # Plot the ODRs
+    plt.plot(x, odr_SRI.beta[0]*x, color="orange")
+    plt.plot(x, odr_SRM.beta[0]*x, color="green")
+    plt.plot(x, odr_LRI.beta[0]*x, color="red")
+    plt.plot(x, odr_LRM.beta[0]*x, color="blue")
+
+    # Finalize plot
+    plt.legend()
+
+
+
+# ODR function
+def perform_odr(x, y, xerr, yerr) -> odr._odrpack.Output:
+    """Finds the ODR for data {x, y} and returns the result"""
+    def linear_model(B, x): return B[0] * x
+    linear = odr.Model(linear_model)
+    mydata = odr.Data(x, y, wd=1.0/xerr, we=1.0/yerr)
+    myodr = odr.ODR(mydata, linear, beta0=[0])
+    output = myodr.run()
+    return output
+
+
+
+
+plot_wavelength_vs_voltage()
 plt.show()
 
-# Plot the bragg wavelengths vs the DeBroglie wavelength
-plt.title("Electron Diffraction")
-plt.xlabel("DeBroglie Wavelength (nm)")
-plt.ylabel("Bragg Wavelength (nm)")
-plt.errorbar(λDEB, λSRI, xerr=λDEB_err, yerr=λSRI_err, fmt=".", label="SRI")
-plt.errorbar(λDEB, λSRM, xerr=λDEB_err, yerr=λSRM_err, fmt=".", label="SRM")
-plt.errorbar(λDEB, λLRI, xerr=λDEB_err, yerr=λLRI_err, fmt=".", label="LRI")
-plt.errorbar(λDEB, λLRM, xerr=λDEB_err, yerr=λLRM_err, fmt=".", label="LRM")
-plt.plot(λDEB, λDEB, label="DeBroglie")
+plot_inverse_wavelength_squared_vs_voltage()
+plt.show()
 
-# Keep the plot square
-plt.gca().set_aspect('equal', adjustable='box')
-
-plt.legend()
+plot_bragg_wavelength_vs_debroglie_wavelength()
 plt.show()

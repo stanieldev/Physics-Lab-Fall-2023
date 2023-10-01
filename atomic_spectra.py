@@ -148,7 +148,7 @@ def plot_diffraction_spectrum(plot: plt, angles: list[float], colors: list[Color
 def plot_colors(plot: plt, orders: list[int], angles: list[float], colors: list[Color]):
 
     # Plot points by color
-    [plot.errorbar(x = order, y = angle, color = color.toRGB(), marker = 'o', linestyle = 'None') for order, angle, color in zip(orders, angles, colors)]
+    [plot.errorbar(x = order, y = angle, color = color.toRGB(), marker = 'o', linestyle = 'None', capsize=5, capthick=1) for order, angle, color in zip(orders, angles, colors)]
 
     # Define linear regression function
     def linear_regression(x, a): return a * x
@@ -177,7 +177,7 @@ def plot_wavelengths(plot: plt, orders: list[int], angles: list[float], colors: 
 
     # Plot lines by color λ = D * s
     [plot.axvline(x = λ, color = color.toRGB(), label = f("λ", λ[0], dλ[0], "nm")) for λ, dλ, color in ordered_pairs]
-    [plot.errorbar(x = λ, y = 0, xerr=dλ, color = color.toRGB(), marker = None, linestyle = 'None') for λ, dλ, color in ordered_pairs]
+    [plot.errorbar(x = λ, y = 0, xerr=dλ, color = color.toRGB(), marker = None, linestyle = 'None', capsize=5, capthick=1) for λ, dλ, color in ordered_pairs]
     [plot.axvline(x = λ + dλ, color = color.toRGB(), linestyle='dashed') for λ, dλ, color in ordered_pairs]
     [plot.axvline(x = λ - dλ, color = color.toRGB(), linestyle='dashed') for λ, dλ, color in ordered_pairs]
 
@@ -192,7 +192,7 @@ def plot_rydberg_constant(plot: plt, n: list[float], λ: list[float], dλ: list[
     λ = np.array([1 / _λ for _λ in λ])
 
     # Plot points
-    plot.errorbar(n, λ, yerr=dλ, marker = 'o', linestyle = 'None')
+    plot.errorbar(n, λ, yerr=dλ, marker = 'o', linestyle = 'None', capsize=5, capthick=1)
 
     # Define linear regression function
     def linear_regression(x, a, b): return a * x + b
