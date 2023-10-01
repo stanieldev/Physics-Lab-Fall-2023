@@ -1,571 +1,421 @@
-import numpy as np
-import os
-import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib.patches as mpatches
+from matplotlib import pyplot as plt
 import scipy.optimize as opt
-import scipy.stats as stats
-from typing import Callable
-import math
-
-# Constants
-dTheta = 0.5 / 60  # sin(x) ~ x for small values of theta
-D = 1/600    # 600 lines per mm
-D = D*10**6  # Convert to nanometers^-1
-
-# Color dictionary
-COLOR_INDEX_TO_HEX = {
-    "0": "#FFC0CB",  # Pink
-    "1": "#7d00db",  # Violet
-    "2": "#2800ff",  # Blue-Violet
-    "3": "#00efff",  # Blue-Green
-    "4": "#ff0000"   # Red
-}
-
-# Data point class
-class DataPoint:
-    def __init__(self, x, y, x_err, y_err, color) -> None:
-        self.x = x
-        self.y = y
-        self.x_err = x_err
-        self.y_err = y_err
-        self.color = color
-    def __repr__(self) -> str:
-        return f"DataPoint({self.x}, {self.y}, {self.x_err}, {self.y_err}, {self.color})"
-
-# Regression lines class
-class RegressionFunctions:
-    class Linear:
-        def __eval__(x, a):
-            return a * x
-        def __form__() -> str:
-            return f"ax"
-    class FullLinear:
-        def __eval__(x, a, b):
-            return a * x + b
-        def __form__() -> str:
-            return f"ax + b"
-
-# Points class
-class Points:
-    def __init__(self, data):
-        # All data
-        self.data = data
-
-        # Sorted by color
-        self.Pink = self.data.transpose()[self.data.transpose()[:, 1] == 0]
-        self.Violet = self.data.transpose()[self.data.transpose()[:, 1] == 1]
-        self.Blue = self.data.transpose()[self.data.transpose()[:, 1] == 2]
-        self.Cyan = self.data.transpose()[self.data.transpose()[:, 1] == 3]
-        self.Red = self.data.transpose()[self.data.transpose()[:, 1] == 4]
+from enum import Enum
+import numpy as np
 
 
 
+# Color enum
+class Color(Enum):
+    Pink = 0
+    Violet = 1
+    Blue_Violet = 2
+    Blue_Green = 3
+    Red = 4
+    def toLambda(self):
+        EXPECTED = [410.1734, 434.0472, 486.135, 656.279]
+        if self.value == 0: return 0
+        return EXPECTED[self.value - 1]
+    def toRGB(self):
+        if self.value == 0: return 255/256, 192/256, 203/256
+        return Color.RGB(self.toLambda())
+    def RGB(λ: float):
 
-# Import data
-path = "./atomic_spectra/manual_spectrometer.txt"
-data = np.loadtxt(path, unpack=True)
+        # This is a port of javascript code from  http://stackoverflow.com/a/14917481
+        gamma = 0.8
+        intensity_max = 1
 
-# Modify data to proper sets
-data[0] = data[0] + data[1]/60  # Add arc seconds to degrees
-data = np.delete(data, 1, 0)    # Remove arc seconds column
-data[0] -= data[0][0]           # Set first angle to 0 degrees
+        if λ < 380:
+            red, green, blue = 0, 0, 0
+        elif λ < 440:
+            red = -(λ - 440) / (440 - 380)
+            green, blue = 0, 1
+        elif λ < 490:
+            red = 0
+            green = (λ - 440) / (490 - 440)
+            blue = 1
+        elif λ < 510:
+            red, green = 0, 1
+            blue = -(λ - 510) / (510 - 490)
+        elif λ < 580:
+            red = (λ - 510) / (580 - 510)
+            green, blue = 1, 0
+        elif λ < 645:
+            red = 1
+            green = -(λ - 645) / (645 - 580)
+            blue = 0
+        elif λ <= 780:
+            red, green, blue = 1, 0, 0
+        else:
+            red, green, blue = 0, 0, 0
+    
+        # let the intensity fall of near the vision limits
+        if λ < 380:
+            factor = 0
+        elif λ < 420:
+            factor = 0.3 + 0.7 * (λ - 380) / (420 - 380)
+        elif λ < 700:
+            factor = 1
+        elif λ <= 780:
+            factor = 0.3 + 0.7 * (780 - λ) / (780 - 700)
+        else:
+            factor = 0
+    
+        def _f(c):
+            if c == 0:
+                return 0
+            else:
+                return intensity_max * pow (c * factor, gamma)
+    
+        return _f(red), _f(green), _f(blue)
 
-# Create all points lists
-POINTS = Points(data)
+def f(label: str, x: float, dx: float, units=None) -> str:
+    dx = np.ceil(dx * 1000) / 1000
+    u = f" {units}" if units is not None else ""
+    return f"{label} +/- δ{label} = {x:.3f}{u} +/- {dx:.3f}{u}"
 
-# Create figure with 4 subplots in a 2x2 grid
-fig, ((ax1, ax3), (ax2, ax4)) = plt.subplots(2, 2)
-fig.patch.set_facecolor('grey')
+def r2(r_squared: float):
+    r_squared = np.floor(r_squared * 1_000_000) / 1_000_000
+    return f"(r²={r_squared*100:.4f}%)"
+
+def constrain(x, min, max):
+    if x < min:
+        return min
+    elif x > max:
+        return max
+    else:
+        return x
 
 
 
+# Calculation functions
+def calculate_wavelengths(orders: list[int], angles: list[float], colors: list[Color]):
+
+    # Constants
+    D = 1/600    # 600 lines per mm
+    D = D*10**6  # Convert to nanometers^-1
+
+    # Define linear regression function
+    def linear_regression(x, a): return a * x
+
+    # Calculate regression for each color
+    ordered_pairs = []
+    for selected_color in list(Color)[1:]:
+        color_data = np.array([[order, angle] for order, angle, color in zip(orders, angles, colors) if color == selected_color])
+        param, covariance = opt.curve_fit(linear_regression, color_data[:, 0], color_data[:, 1])
+        param_error = np.sqrt(np.diag(covariance))
+        ordered_pairs.append([D * param, D * param_error, selected_color])
+
+    # Return ordered pairs
+    return ordered_pairs
+
+def calculate_around_region(data, λ, dλ=10) -> tuple[float, float]:
+
+    # Gaussian function
+    def gaussian(x, A, μ, σ): return A*np.exp(-(x-μ)**2/(2*σ**2))
+
+    # Plot data around a certain λ
+    subset = data[(data[:,0] > λ - dλ) & (data[:,0] < λ + dλ)]
+    wavelengths = subset[:,0]
+    intensities = subset[:,1]
+
+    # Fit gaussian to data
+    popt, pcov = opt.curve_fit(gaussian, wavelengths, intensities, p0=[1, λ, 1])
+    # residuals = intensities - gaussian(wavelengths, *popt)
+    # ss_res = np.sum(residuals**2)
+    # ss_tot = np.sum((intensities-np.mean(intensities))**2)
+    # r_squared = 1 - (ss_res / ss_tot)
+
+    # Return gaussian parameters
+    return popt[1], np.sqrt(pcov[1,1])
 
 
-# Plot the measured diffraction pattern
-def manually_measured_diffraction_plot(plot: plt) -> None:
+
+# Plotting functions
+def plot_diffraction_spectrum(plot: plt, angles: list[float], colors: list[Color]) -> None:
 
     # Set up plot
     plot.get_yaxis().set_visible(False)
     plot.tick_params(axis='x', top=True, bottom=False, labeltop=True, labelbottom=False)
     plot.set_facecolor('black')
-    plot.title.set_text("Manually Measured Atomic Spectrum of Hydrogen")
+    plot.set_xlim(-90, 90)
+    plot.set_xticks(np.arange(-80, 90, 20))
 
-    # Define points as lists
-    diffraction_angles = data[0]
-    spectral_color = np.array([COLOR_INDEX_TO_HEX[str(int(i))] for i in data[1]])
+    # Plot vertical lines
+    [plot.axvline(x = angle, color = color, label = 'axvline - full height') for angle, color in zip(angles, np.array([color.toRGB() for color in colors]))]
 
-    # Plot lines
-    [plot.axvline(x = angle, color = color, label = 'axvline - full height') for angle, color in zip(diffraction_angles, spectral_color)]
-
-manually_measured_diffraction_plot(ax1)
-
-
-# Plot the theoretical diffraction pattern
-def theoretical_diffraction_plot(plot: plt) -> None:
-
-    # Set up plot
-    plot.get_yaxis().set_visible(False)
-    plot.set_facecolor('black')
-    plot.title.set_text("Theoretical Atomic Spectrum of Hydrogen")
-    # plot.get_shared_x_axes().join(plot, ax1)
-
-    # Known wavelengths of light
-    violet_wavelength = 410.2
-    blue_violet_wavelength = 434.0
-    blue_green_wavelength = 486.1
-    red_wavelength = 656.3
-
-    # Unrefracted lines
-    plot.axvline(x = 0, color = COLOR_INDEX_TO_HEX["0"], label = 'axvline - full height')
-
-    # Violet lines
-    violet_angles = [np.arcsin(violet_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/violet_wavelength) + 1)]
-    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["1"], label = 'axvline - full height') for angle in violet_angles]
-    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["1"], label = 'axvline - full height') for angle in violet_angles]
-
-    # Blue-Violet lines
-    blue_violet_angles = [np.arcsin(blue_violet_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/blue_violet_wavelength) + 1)]
-    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["2"], label = 'axvline - full height') for angle in blue_violet_angles]
-    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["2"], label = 'axvline - full height') for angle in blue_violet_angles]
-
-    # Blue-Green lines
-    blue_green_angles = [np.arcsin(blue_green_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/blue_green_wavelength) + 1)]
-    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["3"], label = 'axvline - full height') for angle in blue_green_angles]
-    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["3"], label = 'axvline - full height') for angle in blue_green_angles]
-
-    # Red lines
-    red_angles = [np.arcsin(red_wavelength*m/D)*180/np.pi for m in range(1, math.floor(D/red_wavelength) + 1)]
-    [plot.axvline(x = angle, color = COLOR_INDEX_TO_HEX["4"], label = 'axvline - full height') for angle in red_angles]
-    [plot.axvline(x = -angle, color = COLOR_INDEX_TO_HEX["4"], label = 'axvline - full height') for angle in red_angles]
-
-theoretical_diffraction_plot(ax2)
-
-
-# Plot the sin(angle) vs diffraction order
-def sine_angle_vs_diffraction_order(plot: plt) -> None:
-
-    # Set up plot
-    plot.title.set_text("sin(Angle) vs Diffraction Order")
-    plot.set_ylabel("sin(Angle)")
-    plot.set_xlabel("Diffraction Order")
-
-    # Define points as lists
-    sine_diffraction_angle = np.sin(data[:, 0] * np.pi / 180)
-    diffraction_order = data[:, 2]
-    spectral_color = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in data[1]]
+def plot_colors(plot: plt, orders: list[int], angles: list[float], colors: list[Color]):
 
     # Plot points by color
-    plot.errorbar(x = 0, y = 0, yerr=dTheta, color = matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(0))]), marker = 'o', linestyle = 'None')
-    # [plot.errorbar(x = order, y = sine_angle, yerr=dTheta, color = color, marker = 'o', linestyle = 'None') for order, sine_angle, color in zip(diffraction_order, sine_diffraction_angle, spectral_color)]
+    [plot.errorbar(x = order, y = angle, color = color.toRGB(), marker = 'o', linestyle = 'None') for order, angle, color in zip(orders, angles, colors)]
 
-    # Plot each wavelength of light
-    plot_sine_dataset(plot, POINTS.Violet, "Violet")
-    plot_sine_dataset(plot, POINTS.Blue, "Blue-Violet")
-    plot_sine_dataset(plot, POINTS.Cyan, "Blue-Green")
-    plot_sine_dataset(plot, POINTS.Red, "Red")
+    # Define linear regression function
+    def linear_regression(x, a): return a * x
+
+    # Calculate regression for each color
+    for selected_color in list(Color)[1:]:
+        color_data = np.array([[order, angle] for order, angle, color in zip(orders, angles, colors) if color == selected_color])
+        param, covariance = opt.curve_fit(linear_regression, color_data[:, 0], color_data[:, 1])
+        param_error = np.sqrt(np.diag(covariance))
+        residuals = color_data[:, 1] - linear_regression(color_data[:, 0], *param)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((color_data[:, 1] - np.mean(color_data[:, 1]))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+        plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = f("s", param[0], param_error[0]) + " " + r2(r_squared), color = selected_color.toRGB())
+        
+    # Finalize plot
     plot.legend()
 
-saved_data = []
-def plot_sine_dataset(plot: plt, datum, color_str: str = None) -> tuple:
+def plot_wavelengths(plot: plt, orders: list[int], angles: list[float], colors: list[Color]):
 
-    # Define points as lists
-    sine_diffraction_angle = np.sin(datum[:, 0] * np.pi / 180)
-    diffraction_order = datum[:, 2]
-    spectral_color = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in datum[:, 1]]
+    # Calculate wavelengths
+    ordered_pairs = calculate_wavelengths(orders, angles, colors)
 
-    # Plot points by color
-    [plot.errorbar(x = order, y = sine_angle, yerr=dTheta, color = color, marker = 'o', linestyle = 'None') for order, sine_angle, color in zip(diffraction_order, sine_diffraction_angle, spectral_color)]
-
-    # Calculate regression
-    params, covariance = opt.curve_fit(RegressionFunctions.Linear.__eval__, diffraction_order, sine_diffraction_angle, sigma=np.full(len(datum), dTheta))
-    param_errors = np.sqrt(np.diag(covariance))
-
-    # Plot regression line
-    plot.plot(diffraction_order, RegressionFunctions.Linear.__eval__(diffraction_order, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}", color = COLOR_INDEX_TO_HEX[str(int(datum[0, 1]))])
-
-    # Calculate statistics
-    residuals = sine_diffraction_angle - RegressionFunctions.Linear.__eval__(diffraction_order, *params)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((sine_diffraction_angle - np.mean(sine_diffraction_angle))**2)
-
-    # Calculate probabilities
-    r_squared = 1 - (ss_res / ss_tot)
-
-    # Prepare for printing
-    r_squared = math.floor(r_squared * 10000) / 10000
-
-    # Print statistics
-    print(f"{color_str} Statistics:")
-    print(f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}")
-    print(f"λ +/- δλ = {D * params[0]:.3f}nm +/- {D * param_errors[0]:.3f}nm")
-    print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
-
-    # Save data
-    saved_data.append((D * params[0], D * param_errors[0]))
-
-sine_angle_vs_diffraction_order(ax3)
-
-
-# Plot the wavelength as vertical bars with error bars
-def wavelength_plot(plot: plt) -> None:
-    
     # Set up plot
-    plot.set_xlabel("Wavelength (nm)")
     plot.get_yaxis().set_visible(False)
 
-    # Define points as lists
-    wavelengths = np.array([i[0] for i in saved_data])
-    errors = np.array([i[1] for i in saved_data])
-    colors = [matplotlib.colors.to_rgb(COLOR_INDEX_TO_HEX[str(int(i))]) for i in range(1, 5)]
+    # Plot lines by color λ = D * s
+    [plot.axvline(x = λ, color = color.toRGB(), label = f("λ", λ[0], dλ[0], "nm")) for λ, dλ, color in ordered_pairs]
+    [plot.errorbar(x = λ, y = 0, xerr=dλ, color = color.toRGB(), marker = None, linestyle = 'None') for λ, dλ, color in ordered_pairs]
+    [plot.axvline(x = λ + dλ, color = color.toRGB(), linestyle='dashed') for λ, dλ, color in ordered_pairs]
+    [plot.axvline(x = λ - dλ, color = color.toRGB(), linestyle='dashed') for λ, dλ, color in ordered_pairs]
 
-    # Plot lines by color
-    [plot.axvline(x = wavelength, color = color, label = 'axvline - full height') for wavelength, color in zip(wavelengths, colors)]
-    [plot.errorbar(x = wavelength, y = 0, xerr=error, color = color, marker = None, linestyle = 'None') for wavelength, error, color in zip(wavelengths, errors, colors)]
-    [plot.axvline(x = wavelength + error, color = color, label = 'axvline - full height', linestyle='dashed') for wavelength, error, color in zip(wavelengths, errors, colors)]
-    [plot.axvline(x = wavelength - error, color = color, label = 'axvline - full height', linestyle='dashed') for wavelength, error, color in zip(wavelengths, errors, colors)]
+    # Finalize plot
+    plot.legend()
 
-
-# wavelength_plot(ax4)
-
-
-def rydberg_constant(plot: plt):
-
-    # Set up plot
-    plot.set_xlabel("1/n²")
-    plot.set_ylabel("1 / Wavelength (nm^-1)")
-
-    # Define points as lists
-    x_list = [3,4,5,6]
-    y_list = [660.589, 488.869, 440.637, 401.049]
-    y_error = [3.467, 1.965, 3.882, 6.079]
+def plot_rydberg_constant(plot: plt, n: list[float], λ: list[float], dλ: list[float]) -> None:
 
     # Modify data
-    x_list = np.array([1 / (i**2) for i in x_list])
-    y_error = np.array([i / j**2 for i, j in zip(y_error, y_list)])
-    y_list = np.array([1 / i for i in y_list])
+    n = np.array([1 / (_n**2) for _n in n])
+    dλ = np.array([_λ / _dλ**2 for _λ, _dλ in zip(dλ, λ)])
+    λ = np.array([1 / _λ for _λ in λ])
 
     # Plot points
-    plot.errorbar(x_list, y_list, yerr=y_error, marker = 'o', linestyle = 'None')
+    plot.errorbar(n, λ, yerr=dλ, marker = 'o', linestyle = 'None')
+
+    # Define linear regression function
+    def linear_regression(x, a, b): return a * x + b
 
     # Calculate regression
-    params, covariance = opt.curve_fit(RegressionFunctions.FullLinear.__eval__, x_list, y_list, sigma=y_error)
+    params, covariance = opt.curve_fit(linear_regression, n, λ, sigma=dλ)
     param_errors = np.sqrt(np.diag(covariance))
-
-    # Plot regression line
-    plot.plot(x_list, RegressionFunctions.FullLinear.__eval__(x_list, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}")
-
-    # Calculate statistics
-    residuals = y_list - RegressionFunctions.FullLinear.__eval__(x_list, *params)
+    residuals = λ - linear_regression(n, *params)
     ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y_list - np.mean(y_list))**2)
-
-    # Calculate probabilities
+    ss_tot = np.sum((λ - np.mean(λ))**2)
     r_squared = 1 - (ss_res / ss_tot)
 
-    # Prepare for printing
-    r_squared = math.floor(r_squared * 10000) / 10000
-
-    # Print statistics
-    RD = 0.0109737316
-    print(f"Rydberg Statistics:")
-    print(f"s +/- δs = {-params[0]:.4f}nm^-1 +/- {-param_errors[0]:.4f}nm^-1")
-    print(f"b +/- δb = {4*params[1]:.4f}nm^-1 +/- {4*param_errors[1]:.4f}nm^-1")
-    print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
-    print((-params[0] - RD)/RD)
-
-def machine_rydberg_constant(plot: plt):
-
-    # Set up plot
+    # Initialize plot
+    plot.title.set_text("1/λ vs 1/n²")
     plot.set_xlabel("1/n²")
-    plot.set_ylabel("1 / Wavelength (nm^-1)")
+    plot.set_ylabel("1/λ (nm^-1)")
+    plot.set_facecolor('black')
 
-    # Define points as lists
-    x_list = [3,4,5,6]
-    y_list = [660.109, 485.983, 434.049, 410.196]
-    y_error = [0.126, 0.025, 0.005, 0.033]
+    # Plot regression
+    plot.plot(n, linear_regression(n, *params), label = r2(r_squared))
+
+    # Add statistics to legend
+    handles, labels = plt.gca().get_legend_handles_labels()
+    patches = [
+        mpatches.Patch(color='none', label='Slope Label'), 
+        mpatches.Patch(color='none', label='Intercept Label'),
+        mpatches.Patch(color='none', label='Rydberg Constant Label 1'),
+        mpatches.Patch(color='none', label='Rydberg Constant Label 2')
+    ]
+    [handles.append(patch) for patch in patches]
+    labels.append(f("s", params[0]*1000, param_errors[0]*1000, "pm^-1"))
+    labels.append(f("b", params[1]*1000, param_errors[1]*1000, "pm^-1"))
+    labels.append(f"Ry_s = {-params[0]*1000:.3f} +/- {param_errors[0]*1000:.3f}pm^-1")
+    labels.append(f"Ry_b = {params[1]*4000:.3f} +/- {param_errors[1]*4000:.3f}pm^-1")
+    
+    # Finalize plot
+    plot.legend(handles, labels)
 
-    # Modify data
-    x_list = np.array([1 / (i**2) for i in x_list])
-    y_error = np.array([i / j**2 for i, j in zip(y_error, y_list)])
-    y_list = np.array([1 / i for i in y_list])
+def plot_emission_spectrum(plot: plt, λ: np.ndarray, intensity: np.ndarray, sigma=lambda x: x) -> None:
+    
+    # Initialize plot
+    plot.set_ylim(0, 1.1)
+    plot.set_ylabel("sqrt(Relative Intensity)")
+    plot.set_facecolor('black')
 
-    # Plot points
-    plot.errorbar(x_list, y_list, yerr=y_error, marker = 'o', linestyle = 'None')
+    # Normalize intensity
+    intensity /= max(intensity)
 
-    # Calculate regression
-    params, covariance = opt.curve_fit(RegressionFunctions.FullLinear.__eval__, x_list, y_list, sigma=y_error)
-    param_errors = np.sqrt(np.diag(covariance))
+    # Remove negative intensities
+    λ = λ[np.where(intensity >= 0)]
+    intensity = intensity[np.where(intensity >= 0)]
 
-    # Plot regression line
-    plot.plot(x_list, RegressionFunctions.FullLinear.__eval__(x_list, *params), label = f"s +/- δs = {params[0]:.3f} +/- {param_errors[0]:.3f}")
+    # Plot data
+    [plot.axvline(_λ, color=Color.RGB(_λ), alpha=constrain(sigma(I), 0, 1)) for _λ, I in zip(λ, intensity)]
 
-    # Calculate statistics
-    residuals = y_list - RegressionFunctions.FullLinear.__eval__(x_list, *params)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y_list - np.mean(y_list))**2)
 
-    # Calculate probabilities
-    r_squared = 1 - (ss_res / ss_tot)
 
-    # Prepare for printing
-    r_squared = math.floor(r_squared * 10000) / 10000
+# Collections of data
+def manual_spectroscopy():
 
-    # Print statistics
-    RD = 0.0109737316
-    print(f"Rydberg Statistics:")
-    print(f"s +/- δs = {params[0]:.4f}nm^-1 +/- {param_errors[0]:.4f}nm^-1")
-    print(f"b +/- δb = {params[1]:.4f}nm^-1 +/- {param_errors[1]:.4f}nm^-1")
-    print(f"r² = {r_squared:.3f} ({r_squared*100:.2f}%)")
-    print((-params[0] - RD)/RD)
+    # Create figure with 4 subplots in a 2x2 grid
+    fig, ((ax1, ax3), (ax2, ax4)) = plt.subplots(2, 2)
+    fig.patch.set_facecolor('grey')
+    fig.subplots_adjust(hspace=0.35)
 
 
-rydberg_constant(ax4)
+    # Import manual spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
 
+    # Modify data to proper sets
+    diffraction_angles = data[0] + data[1]/60  # Add arc seconds to degrees
+    diffraction_angles = diffraction_angles - diffraction_angles[0]  # Set first angle to 0
+    diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
 
+    # Plot the measured diffraction pattern
+    ax1.title.set_text("Manually Measured Atomic Spectrum of Hydrogen")
+    plot_diffraction_spectrum(ax1, diffraction_angles, diffraction_colors)
 
 
+    # Import theoretical spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_theory.txt", unpack=True)
 
+    # Modify data to proper sets
+    diffraction_angles = data[0]
+    diffraction_colors = [Color(int(i)) for i in data[1]]
 
+    # Plot the theoretical diffraction pattern
+    ax2.title.set_text("Theoretical Atomic Spectrum of Hydrogen")
+    plot_diffraction_spectrum(ax2, diffraction_angles, diffraction_colors)
 
 
+    # Import manual spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
 
+    # Modify data to proper sets
+    diffraction_angles = data[0] - data[0][0]  # Set first angle to 0
+    diffraction_angles = np.sin(diffraction_angles * np.pi / 180)  # Convert to sin(angle)
+    diffraction_orders = data[3]  # Get diffraction order
+    diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
 
+    # Plot the sin(angle) vs diffraction order
+    ax3.title.set_text("sin(Angle) vs Diffraction Order")
+    ax3.set_xlabel("Diffraction Order")
+    ax3.set_ylabel("sin(Angle)")
+    ax3.set_facecolor('black')
+    plot_colors(ax3, diffraction_orders, diffraction_angles, diffraction_colors)
 
 
+    # # Import manual spectrometer data
+    # data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
 
+    # # Modify data to proper sets
+    # diffraction_angles = data[0] - data[0][0]  # Set first angle to 0
+    # diffraction_angles = np.sin(diffraction_angles * np.pi / 180)  # Convert to sin(angle)
+    # diffraction_orders = data[3]  # Get diffraction order
+    # diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
 
+    # # Plot the wavelengths of the hydrogen spectrum
+    # ax4.title.set_text("Wavelengths of Hydrogen Spectrum")
+    # ax4.set_xlabel("Wavelengths (nm)")
+    # ax4.set_facecolor('black')
+    # plot_wavelengths(ax4, diffraction_orders, diffraction_angles, diffraction_colors)
 
 
-# # Top right subplot
+    # Import manual spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
 
+    # Modify data to proper sets
+    diffraction_angles = data[0] - data[0][0]  # Set first angle to 0
+    diffraction_angles = np.sin(diffraction_angles * np.pi / 180)  # Convert to sin(angle)
+    diffraction_orders = data[3]  # Get diffraction order
+    diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
 
-# # Error bars
-# ax3.errorbar(pink_x, np.sin(pink_y * C), yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict["0"]), marker = 'o', linestyle = 'None', label = "Pink")
-# ax3.errorbar(violet_x, np.sin(violet_y * C), yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict["1"]), marker = 'o', linestyle = 'None', label = "Violet")
-# ax3.errorbar(blue_violet_x, np.sin(blue_violet_y * C), yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict["2"]), marker = 'o', linestyle = 'None', label = "Blue-Violet")
-# ax3.errorbar(blue_green_x, np.sin(blue_green_y * C), yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict["3"]), marker = 'o', linestyle = 'None', label = "Blue-Green")
-# ax3.errorbar(red_x, np.sin(red_y * C), yerr=dTheta, color = matplotlib.colors.to_rgb(color_dict["4"]), marker = 'o', linestyle = 'None', label = "Red")
+    # Calculate wavelengths
+    ordered_pairs = calculate_wavelengths(diffraction_orders, diffraction_angles, diffraction_colors)
 
-# # Regression lines
-# violet_params, violet_covariance = opt.curve_fit(RegressionFunctions.Linear.__eval__, violet_x, np.sin(violet_y * C), sigma=np.full(len(violet_points), dTheta))
-# blue_violet_params, blue_violet_covariance = opt.curve_fit(RegressionFunctions.Linear.__eval__, blue_violet_x, np.sin(blue_violet_y * C), sigma=np.full(len(blue_violet_points), dTheta))
-# blue_green_params, blue_green_covariance = opt.curve_fit(RegressionFunctions.Linear.__eval__, blue_green_x, np.sin(blue_green_y * C), sigma=np.full(len(blue_green_points), dTheta))
-# red_params, red_covariance = opt.curve_fit(RegressionFunctions.Linear.__eval__, red_x, np.sin(red_y * C), sigma=np.full(len(red_points), dTheta))
+    # Find the wavelengths of the Balmer series
+    n = [6, 5, 4, 3]
+    λ = np.array([i[0][0] for i in ordered_pairs])
+    dλ = np.array([i[1][0] for i in ordered_pairs])
 
+    # Plot 1/λ vs 1/n²
+    plot_rydberg_constant(ax4, n, λ, dλ)
 
-# # Print regression line parameters
-# print(f"Blue-Violet Slope: {blue_violet_params[0]:.3f} +/- {np.sqrt(np.diag(blue_violet_covariance))[0]:.3f}")
-# print(f"Blue-Green Slope: {blue_green_params[0]:.3f} +/- {np.sqrt(np.diag(blue_green_covariance))[0]:.3f}")
-# print(f"Red Slope: {red_params[0]:.3f} +/- {np.sqrt(np.diag(red_covariance))[0]:.3f}")
-# print()
-# blue_violet_wavelength = D * blue_violet_params[0]
-# blue_green_wavelength = D * blue_green_params[0]
-# red_wavelength = D * red_params[0]
-# print(f"Blue-Violet Wavelength: {blue_violet_wavelength:.3f} +/- {np.sqrt(np.diag(blue_violet_covariance))[0] * D:.3f}")
-# print(f"Blue-Green Wavelength: {blue_green_wavelength:.3f} +/- {np.sqrt(np.diag(blue_green_covariance))[0] * D:.3f}")
-# print(f"Red Wavelength: {red_wavelength:.3f} +/- {np.sqrt(np.diag(red_covariance))[0] * D:.3f}")
 
+    # Show the plots
+    plt.show()
 
-# print(f"Violet Slope: {violet_params[0]:.3f} +/- {np.sqrt(np.diag(violet_covariance))[0]:.3f}")
-# violet_wavelength = D * violet_params[0]
-# print(f"Violet Wavelength: {violet_wavelength:.3f} +/- {np.sqrt(np.diag(violet_covariance))[0] * D:.3f}")
+def machine_spectroscopy():
 
+    # Create figure with 2 subplots
+    fig, (ax1) = plt.subplots(1,1)
+    fig.patch.set_facecolor('grey')
+    fig.subplots_adjust(hspace=0.35)
 
 
 
+    # # Import machine spectrometer data
+    # high_data = np.loadtxt('./atomic_spectra/H_high_off.txt', skiprows=1)
+    # low_data = np.loadtxt('./atomic_spectra/H_low_on.txt', skiprows=1)
 
+    # # Plot data around a certain λ
+    # EXPECTED = [656.279, 486.135, 434.0472, 410.1734, 397.0075, 388.9064]
+    # λ3, dλ3 = calculate_around_region(low_data, EXPECTED[0], dλ=10)
+    # λ4, dλ4 = calculate_around_region(high_data, EXPECTED[1], dλ=10)
+    # λ5, dλ5 = calculate_around_region(high_data, EXPECTED[2], dλ=9)
+    # λ6, dλ6 = calculate_around_region(high_data, EXPECTED[3], dλ=7)
+    # λ7, dλ7 = calculate_around_region(high_data, EXPECTED[4], dλ=5)
+    # λ8, dλ8 = calculate_around_region(high_data, EXPECTED[5], dλ=3)
 
+    # # Plot 1/λ vs 1/n²
+    # plot_rydberg_constant(ax1, [3, 4, 5, 6, 7, 8], [λ3, λ4, λ5, λ6, λ7, λ8], [dλ3, dλ4, dλ5, dλ6, dλ7, dλ8])
 
 
 
+    # # Import machine spectrometer data
+    # data = np.loadtxt('./atomic_spectra/H_high_on.txt', skiprows=1)
 
-# # Calculate statistics
-# fig_param_errors = np.sqrt(np.diag(covariance))
-# chi_squared = np.sum(((independent_column.data - regression.__eval__(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
-# degrees_of_freedom = len(dependent_column.data) - len(fig_params)
-# reduced_chi_squared = chi_squared / degrees_of_freedom
+    # # Split data into wavelength and intensity
+    # wavelengths = data[:,0]
+    # intensities = data[:,1]
 
-# # Calculate r^2
-# residuals = independent_column.data - regression.__eval__(dependent_column.data, *fig_params)
-# ss_res = np.sum(residuals**2)
-# ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
-# r_squared = 1 - (ss_res / ss_tot)
+    # # Plot the emission spectrum
+    # ax1.title.set_text("Emission Spectrum of Hydrogen")
+    # ax1.set_xlabel("Wavelength (nm)")
+    # ax1.set_xlim(380, 780)
+    # plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
 
-# # Calculate p-values
-# p_value_chi_squared = 1 - stats.chi2.cdf(chi_squared, degrees_of_freedom)
-# p_value_r_squared = 1 - stats.f.cdf(r_squared, 1, degrees_of_freedom)
 
-# # Print statistics
-# print(f"Regression form: {regression.__form__()}")
-# [print(f"{fig_params[i]=:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
-# print(f"χ² = {chi_squared:.3f} (p={p_value_chi_squared*100}%)")
-# print(f"Degrees of Freedom = {degrees_of_freedom}")
-# print(f"Reduced χ² = {reduced_chi_squared:.3f}")
-# print(f"r² = {r_squared:.3f} (p={p_value_r_squared*100}%)")
 
+    # Import machine spectrometer data
+    data = np.loadtxt('./atomic_spectra/He.txt', skiprows=1)
 
+    # Split data into wavelength and intensity
+    wavelengths = data[:,0]
+    intensities = data[:,1]
 
+    # Plot the emission spectrum
+    ax1.title.set_text("Emission Spectrum of Helium")
+    ax1.set_xlabel("Wavelength (nm)")
+    ax1.set_xlim(380, 780)
+    plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
 
 
 
+    # # Import machine spectrometer data
+    # data = np.loadtxt('./atomic_spectra/Ne_med.txt', skiprows=1)
 
+    # # Split data into wavelength and intensity
+    # wavelengths = data[:,0]
+    # intensities = data[:,1]
 
- 
-# rendering plot
-plt.show()
+    # # Plot the emission spectrum
+    # ax1.title.set_text("Emission Spectrum of Neon")
+    # ax1.set_xlabel("Wavelength (nm)")
+    # ax1.set_xlim(380, 780)
+    # plot_emission_spectrum(ax1, wavelengths, intensities)
 
 
 
-# plot data
+    plt.show()
 
-
-# theta_error = DataColumn("Theta Error", "σ_θ", "degrees", data[2] + data[3]/60)
-# wavelength = DataColumn("Wavelength", "λ", "nm", data[0])
-
-
-
-
-
-
-
-
-
-# # Application class
-# class Application:
-
-
-
-
-
-
-#     def user_plot_scatter(self) -> None:
-
-#         # Plot text objects
-#         x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
-#         y_label = f"{independent_column.var}({independent_column.unit})\n{independent_column.name}"
-#         title = f"{independent_column.name} vs. {dependent_column.name}"
-
-#         # Create plot
-#         fig = plt
-#         fig.errorbar(dependent_column.data, independent_column.data, yerr=independent_error_column.data, capsize=5, marker='o', linestyle='None')
-#         fig.xlabel(x_label)
-#         fig.ylabel(y_label)
-#         fig.title(title)
-
-#         # Show figure
-#         fig.show()
-#         self.last_console_message = "Scatter plot plotted successfully!"    
-
-#     def user_plot_regression(self) -> None:
-        
-#         # Print instructions
-#         print("Scatter Plot w/ Regression Protocol")
-#         print("> Enter the index of the columns you want to plot")
-#         print("> Enter \"exit\" to go back to the menu\n")
-#         self.list_available_columns()
-        
-#         # Query data
-#         try:
-#             dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
-#             regression = self.user_query_regression()
-#         except:
-#             return
-
-#         # Plot text objects
-#         x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
-#         y_label = f"{independent_column.var}({independent_column.unit})\n{independent_column.name}"
-#         title = f"{independent_column.name} vs. {dependent_column.name}"
-
-#         # Create plot
-#         fig = plt
-#         fig.errorbar(dependent_column.data, independent_column.data, yerr=independent_error_column.data, capsize=5, marker='o', linestyle='None')
-#         fig.xlabel(x_label)
-#         fig.ylabel(y_label)
-#         fig.title(title)
-
-
-#         # Regression
-#         fig_params, covariance = opt.curve_fit(regression.__eval__, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
-#         fig.plot(dependent_column.data, regression.__eval__(dependent_column.data, *fig_params), label = 'fit')
-        
-#         # Calculate statistics
-#         fig_param_errors = np.sqrt(np.diag(covariance))
-#         chi_squared = np.sum(((independent_column.data - regression.__eval__(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
-#         degrees_of_freedom = len(dependent_column.data) - len(fig_params)
-#         reduced_chi_squared = chi_squared / degrees_of_freedom
-
-#         # Calculate r^2
-#         residuals = independent_column.data - regression.__eval__(dependent_column.data, *fig_params)
-#         ss_res = np.sum(residuals**2)
-#         ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
-#         r_squared = 1 - (ss_res / ss_tot)
-
-#         # Calculate p-values
-#         p_value_chi_squared = 1 - stats.chi2.cdf(chi_squared, degrees_of_freedom)
-#         p_value_r_squared = 1 - stats.f.cdf(r_squared, 1, degrees_of_freedom)
-
-#         # Print statistics
-#         print(f"Regression form: {regression.__form__()}")
-#         [print(f"{fig_params[i]=:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
-#         print(f"χ² = {chi_squared:.3f} (p={p_value_chi_squared*100}%)")
-#         print(f"Degrees of Freedom = {degrees_of_freedom}")
-#         print(f"Reduced χ² = {reduced_chi_squared:.3f}")
-#         print(f"r² = {r_squared:.3f} (p={p_value_r_squared*100}%)")
-
-
-#         # Show figure
-#         fig.show()
-#         self.last_console_message = "Regression plotted successfully!"
-
-
-
-#     def user_statistics(self) -> None:
-        
-#         # Validation check
-#         if len(self.stored_data) == 0:
-#             self.last_console_message = "Stored data is empty!"
-#             return
-        
-#         # Print instructions
-#         print("Scatter Plot w/ Regression Protocol")
-#         print("> Enter the index of the columns you want to plot")
-#         print("> Enter \"exit\" to go back to the menu\n")
-#         self.list_available_columns()
-        
-#         # Query data
-#         try:
-#             dependent_column, independent_column, independent_error_column = self.user_query_scatterplot()
-#             regression = self.user_query_regression()
-#         except ReturnToMenuException:
-#             return
-
-#         # Plot text objects
-#         x_label = f"{dependent_column.name}\n{dependent_column.var}({dependent_column.unit})"
-#         y_label = f"{independent_column.var}({independent_column.unit})\n{independent_column.name}"
-#         title = f"{independent_column.name} vs. {dependent_column.name}"
-
-#         # Regression statistics
-#         fig_params, covariance = opt.curve_fit(regression.__eval__, dependent_column.data, independent_column.data, sigma = independent_error_column.data)
-#         fig_param_errors = np.sqrt(np.diag(covariance))
-#         residuals = independent_column.data - regression.__eval__(dependent_column.data, *fig_params)
-#         ss_res = np.sum(residuals**2)
-#         ss_tot = np.sum((independent_column.data - np.mean(independent_column.data))**2)
-#         r_squared = 1 - (ss_res / ss_tot)
-#         p_value_r_squared = 1 - stats.f.cdf(r_squared, 1, degrees_of_freedom)
-
-#         # Chi squared statistics
-#         chi_squared = np.sum(((independent_column.data - regression.__eval__(dependent_column.data, *fig_params)) / independent_error_column.data)**2)
-#         degrees_of_freedom = len(dependent_column.data) - len(fig_params)
-#         reduced_chi_squared = chi_squared / degrees_of_freedom
-#         p_value_chi_squared = 1 - stats.chi2.cdf(chi_squared, degrees_of_freedom)
-
-#         # Print statistics
-#         print(f"Regression form: {regression.__form__()}")
-#         [print(f"{fig_params[i]=:.3f} +/- {fig_param_errors[i]:.3f}") for i in range(len(fig_params))]
-#         print(f"r² = {r_squared:.3f} (p={p_value_r_squared*100}%)")
-#         print(f"χ² = {chi_squared:.3f} (p={p_value_chi_squared*100}%)")
-#         print(f"Reduced χ² = {reduced_chi_squared:.3f}")
-#         print(f"Degrees of Freedom = {degrees_of_freedom}")
-
-#         # Print success
-#         self.last_console_message = "Regression plotted successfully!"
+if __name__ == "__main__":
+    #manual_spectroscopy()
+    #machine_spectroscopy()
+    pass
