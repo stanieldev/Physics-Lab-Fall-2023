@@ -13,6 +13,16 @@ d11 = 0.123  # nm
 d10 = 0.213  # nm
 K = 1.227  # V^1/2 nm
 
+# ODR function
+def perform_odr(x, y, xerr, yerr) -> odr._odrpack.Output:
+    """Finds the ODR for data {x, y} and returns the result"""
+    def linear_model(B, x): return B[0] * x
+    linear = odr.Model(linear_model)
+    mydata = odr.Data(x, y, wd=1.0/xerr, we=1.0/yerr)
+    myodr = odr.ODR(mydata, linear, beta0=[0])
+    output = myodr.run()
+    return output
+
 
 
 # Raw to compiled data
@@ -172,6 +182,7 @@ def plot_wavelength_vs_voltage() -> None:
     
     # Finalize plot
     plt.legend()
+    plt.show()
 
 # Plot 1/λ² vs Voltage
 def plot_inverse_wavelength_squared_vs_voltage() -> None:
@@ -203,6 +214,7 @@ def plot_inverse_wavelength_squared_vs_voltage() -> None:
 
     # Finalize plot
     plt.legend()
+    plt.show()
 
 # Plot Bragg Wavelength vs DeBroglie Wavelength
 def plot_bragg_wavelength_vs_debroglie_wavelength() -> None:
@@ -259,27 +271,12 @@ def plot_bragg_wavelength_vs_debroglie_wavelength() -> None:
 
     # Finalize plot
     plt.legend()
+    plt.show()
 
 
 
-# ODR function
-def perform_odr(x, y, xerr, yerr) -> odr._odrpack.Output:
-    """Finds the ODR for data {x, y} and returns the result"""
-    def linear_model(B, x): return B[0] * x
-    linear = odr.Model(linear_model)
-    mydata = odr.Data(x, y, wd=1.0/xerr, we=1.0/yerr)
-    myodr = odr.ODR(mydata, linear, beta0=[0])
-    output = myodr.run()
-    return output
-
-
-
-
-plot_wavelength_vs_voltage()
-plt.show()
-
-plot_inverse_wavelength_squared_vs_voltage()
-plt.show()
-
-plot_bragg_wavelength_vs_debroglie_wavelength()
-plt.show()
+# Main
+if __name__ == "__main__":
+    plot_wavelength_vs_voltage()
+    plot_inverse_wavelength_squared_vs_voltage()
+    plot_bragg_wavelength_vs_debroglie_wavelength()
