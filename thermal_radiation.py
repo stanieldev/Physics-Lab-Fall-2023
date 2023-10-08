@@ -44,11 +44,11 @@ def prelab():
 # Constants
 C = 0.822787  # Prelab
 dC = 6.81e-4  # Prelab
-T_0 = 300
-R_0 = 5
-A_s = 1
-Ω = 1
-# If A_s or Ω has an error, it can be quickly added to the code below
+R_0 = 4.76    # Ohms
+dR_0 = 0.40   # Ohms
+T_0 = 296.6   # K
+dT_0 = 0.1    # K
+
 # Consider switching out linear regressions with orthogonal distance regressions
 
 
@@ -65,44 +65,44 @@ def compile_data():
 
 
     # Find the mean and standard error of voltage
-    def voltage(V: np.ndarray) -> tuple(np.ndarray, np.ndarray):
-        V_bar = []   # mean
-        dV_bar = []  # standard deviation / sqrt(n)
-        return V_bar, dV_bar
+    def voltage(V: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        _V = V
+        _dV = np.full(V.shape, 0.1)
+        return _V, _dV
     V, dV = voltage(V)
 
     # Find the mean and standard error of current
-    def current(I: np.ndarray) -> tuple(np.ndarray, np.ndarray):
-        I_bar = []   # mean
-        dI_bar = []  # standard deviation / sqrt(n)
-        return I_bar, dI_bar
+    def current(I: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        _I = I
+        _dI = np.full(I.shape, 0.1)
+        return _I, _dI
     I, dI = current(I)
 
     # Find the mean and standard error of power
-    def power(P: np.ndarray) -> tuple(np.ndarray, np.ndarray):
-        P_bar = []   # mean
-        dP_bar = []  # standard deviation / sqrt(n)
-        return P_bar, dP_bar
+    def power(P: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        _P = P
+        _dP = np.full(P.shape, 0.001)
+        return _P, _dP
     P, dP = power(P)
 
 
     # Compile resistance data
-    def resistance(V: np.ndarray, I: np.ndarray) -> tuple(np.ndarray, np.ndarray):
+    def resistance(V: np.ndarray, I: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return V / I, (V / I) * np.sqrt((dV/V)**2 + (dI/I)**2)
     R, dR = resistance(V, I)
 
     # Compile temperature data
-    def temperature(R: np.ndarray, dR: np.ndarray) -> tuple(np.ndarray, np.ndarray):
+    def temperature(R: np.ndarray, dR: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return T_0 * (R/R_0)**C, T_0 * (R/R_0)**C * np.sqrt((np.log(R/R_0) * dC) ** 2 + (C * (dR/R)) ** 2)
     T, dT = temperature(R, dR)
 
     # Compile log temperature data
-    def log_temperature(R: np.ndarray, dR: np.ndarray) -> tuple(np.ndarray, np.ndarray):
+    def log_temperature(R: np.ndarray, dR: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return np.log(T_0 / R_0 ** C) + C * np.log(R), np.sqrt((np.log(R/R_0) * dC) ** 2 + (C * (dR/R)) ** 2)
     log_T, log_dT = log_temperature(R, dR)
 
     # Compile log power data
-    def log_power(P: np.ndarray, dP: np.ndarray) -> tuple(np.ndarray, np.ndarray):
+    def log_power(P: np.ndarray, dP: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return np.log(P), dP / P
     log_P, log_dP = log_power(P, dP)
 
@@ -127,20 +127,26 @@ def plot_log_power_vs_log_temperature():
     log_dP = data[:,3]
 
     # Calculate a linear regression
-    def linear_regression(x, b): return 4 * x + b
-    b, cov = curve_fit(linear_regression, log_T, log_P)
-    db = np.sqrt(cov[0,0])
-    σ = (4 * np.pi) / (A_s * Ω) * (10 ** b)
-    dσ = (4 * np.pi) / (A_s * Ω) * (10 ** b) * np.log(10) * db
-    print(f"σ +/- δσ = {σ:.3e} +/- {dσ:.3e} W/K^4")
+    def linear_regression(x, a, b): return a * x + b
+    params, cov = curve_fit(linear_regression, log_T, log_P)
+    s, b = params
+    ds, db = np.sqrt(cov[0,0]), np.sqrt(cov[1,1])
+
+    # s ~ 4, b = -ln(k)
+    # print s and b
+    print(f"s +/- ds = {s:.6f} +/- {ds:.6f}")
+    print(f"b +/- db = {b:.6f} +/- {db:.6f}")
+
+    # Calculate r^2
+    r_squared = 1 - (np.sum((log_P - linear_regression(log_T, s, b))**2) / np.sum((log_P - np.mean(log_P))**2))
+    print(f"r^2 = {r_squared*100:.4f}%")
 
     # Plot the data
     plt.title('Thermal Radiation')
-    plt.xlabel('ln(T)')
-    plt.ylabel('ln(P)')
+    plt.xlabel('ln(T) [ln K]')
+    plt.ylabel('ln(P) [ln mV]')
     plt.errorbar(log_T, log_P, xerr=log_dT, yerr=log_dP, fmt='o')
-    plt.plot(log_T, linear_regression(log_T, b), label=f"b = {b[0]:.3f} +/- {np.sqrt(cov[0,0]):.3f}")
-    plt.legend()
+    plt.plot(log_T, linear_regression(log_T, s, b))
     plt.show()
 
 def plot_power_vs_temperature():
@@ -156,43 +162,38 @@ def plot_power_vs_temperature():
     
         # Plot the data
         plt.errorbar(T, P, xerr=dT, yerr=dP, fmt='o')
-        plt.xlabel('T (K)')
-        plt.ylabel('P (W)')
+        plt.xlabel('T [K]')
+        plt.ylabel('P [mV]')
         plt.title('Thermal Radiation')
         plt.show()
 
-def plot_power_vs_temperature_4th():
-    
-        # Load the data
-        data = np.loadtxt('thermal_radiation/week_1_lin_compiled.txt', skiprows=1)
-    
-        # Split the data into four arrays
-        T = data[:,0]
-        dT = data[:,1]
-        P = data[:,2]
-        dP = data[:,3]
+def plot_radiated_power_vs_electrical_power():
 
-        # Rause the temperature to the 4th power
-        dT = 4 * T**3 * dT
-        T = T**4
+    # Load the data
+    data = np.loadtxt('thermal_radiation/week_1_raw.txt', skiprows=1)
 
-        # Subtract T_0^4 from all temperatures
-        T = T - T_0**4
+    # Split the data into three arrays
+    electrical_power = data[:,0] * data[:,1]
+    radiated_power = data[:,2]
 
-        # Calculate a linear regression
-        def linear_regression(x, a): return a * x
-        s, cov = curve_fit(linear_regression, T, P)
-        ds = np.sqrt(cov[0,0])
-        σ = (4 * np.pi) / (A_s * Ω) * s
-        dσ = (4 * np.pi) / (A_s * Ω) * ds
-        print(f"σ +/- δσ = {σ:.3e} +/- {dσ:.3e} W/K^4")
-    
-        # Plot the data
-        plt.title('Thermal Radiation')
-        plt.xlabel('T^4 - T_0^4 (K)')
-        plt.ylabel('P (W)')
-        plt.errorbar(T, P, xerr=dT, yerr=dP, fmt='o')
-        plt.plot(T, linear_regression(T, s), label=f"s = {s[0]:.3f} +/- {np.sqrt(cov[0,0]):.3f}")
-        plt.legend()
-        plt.show()
+    # Calculate a linear regression
+    def linear_regression(x, a): return a * x
+    params, cov = curve_fit(linear_regression, electrical_power, radiated_power)
+    s = params[0]
+    ds = np.sqrt(cov[0,0])
+    print(f"s +/- ds = {s:.6f} +/- {ds:.6f}")
 
+    # Calculate r^2
+    r_squared = 1 - (np.sum((radiated_power - linear_regression(electrical_power, s))**2) / np.sum((radiated_power - np.mean(radiated_power))**2))
+    print(f"r^2 = {r_squared*100:.4f}%")
+
+    # Plot the data
+    plt.plot(electrical_power, radiated_power, 'o')
+    plt.plot(electrical_power, linear_regression(electrical_power, s))
+    plt.xlabel('Electrical Power [W]')
+    plt.ylabel('Radiated Power [mV]')
+    plt.title('Thermal Radiation')
+    plt.show()
+
+
+plot_radiated_power_vs_electrical_power()

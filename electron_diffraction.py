@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import odr
+import scipy.odr as odr
 from scipy.stats import t as studentt
 
 # Constants
