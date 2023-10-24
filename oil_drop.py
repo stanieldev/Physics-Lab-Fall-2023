@@ -18,9 +18,38 @@ M = 2.04       # Unitless
 δM = 0.05      # Unitless
 
 # Measurement uncertainties
-δy = 0   # mm
-δt = 0   # s
-δV = 0   # V
+δy = 0.1   # mm
+δt = 0.5   # s
+δV = 1   # V
+
+
+
+# Measurement functions
+def v_δv(Δy: float, Δt: float):
+    v = (Δy/Δt)/M  # M is magnifying power
+    δv = v * np.sqrt( (δy/Δy)**2 + (δt/Δt)**2 + (δM/M)**2 )
+    return v, δv
+
+def r_δr(v_G: float, δv_G: float):
+    K = 9*η/(2*(ρ_oil - ρ_air)*g)
+    r = np.sqrt(K * v_G)
+    δr = (K/(2*r)) * δv_G
+    return r, δr
+
+def q_δq(r, δr, v_G, δv_G, v_V, δv_V, V):
+    q = (6 * np.pi * η * d * (v_G + v_V) * r) / V
+    δq = q * np.sqrt( (δd/d)**2 + (δV/V)**2 + ((δv_G+δv_V)/(v_G+v_V))**2 + (δr/r)**2 )
+    return q, δq
+
+def qc_δqc(Q, δQ, r, δr):
+    qc = Q / (1 + A/r)**1.5
+    δqc = qc * np.sqrt( (δQ/Q)**2 + (1.5*A*δr/(r*(r-A)))**2 )
+    return qc, δqc
+
+def n_δn(q, δq):
+    n = q / 1.602e-19
+    δn = n * (δq/q)
+    return n, δn
 
 
 
@@ -34,12 +63,6 @@ def compile_v():
     V = data[:, 0]  # V
     Δy_V, Δt_V = data[:, 1], data[:, 2]  # mm, s
     Δy_G, Δt_G = data[:, 3], data[:, 4]  # mm, s
-
-    # Define v,δv function
-    def v_δv(Δy: float, Δt: float):
-        v = (Δy/Δt)/M  # M is magnifying power
-        δv = v * np.sqrt( (δy/Δy)**2 + (δt/Δt)**2 + (δM/M)**2 )
-        return v, δv
 
     # Calculate v,δv (mm/s)
     v_V, δv_V = v_δv(Δy_V, Δt_V)
@@ -58,13 +81,6 @@ def compile_r():
     # Break data into columns
     v_G = data[:, 3] * 1e-3   # Convert velocity mm/s -> m/s
     δv_G = data[:, 4] * 1e-3  # Convert velocity mm/s -> m/s
-
-    # Define r,δr function
-    def r_δr(v_G: float, δv_G: float):
-        K = 9*η/(2*(ρ_oil - ρ_air)*g)
-        r = np.sqrt(K * v_G)
-        δr = (K/(2*r)) * δv_G
-        return r, δr
 
     # Calculate r,δr (m)
     r, δr = r_δr(v_G, δv_G)
@@ -89,12 +105,6 @@ def compile_q():
     v_G = vel_data[:, 3] * 1e-3   # Convert velocity mm/s -> m/s
     δv_G = vel_data[:, 4] * 1e-3  # Convert velocity mm/s -> m/s
 
-    # Define q,δq function
-    def q_δq(r, δr, v_G, δv_G, v_V, δv_V, V):
-        q = (6 * np.pi * η * d * (v_G + v_V) * r) / V
-        δq = q * np.sqrt( (δd/d)**2 + (δV/V)**2 + ((δv_G+δv_V)/(v_G+v_V))**2 + (δr/r)**2 )
-        return q, δq
-
     # Calculate q,δq (C)
     q, δq = q_δq(r, δr, v_G, δv_G, v_V, δv_V, V)
 
@@ -114,12 +124,6 @@ def compile_qc():
     δq = chr_data[:, 1]
     r = rad_data[:, 0]
     δr = rad_data[:, 1]
-
-    # Define qc,δqc function
-    def qc_δqc(Q, δQ, r, δr):
-        qc = Q / (1 + A/r)**1.5
-        δqc = qc * np.sqrt( (δQ/Q)**2 + (1.5*A*δr/(r*(r-A)))**2 )
-        return qc, δqc
     
     # Calculate qc,δqc (C)
     qc, δqc = qc_δqc(q, δq, r, δr)
@@ -138,12 +142,6 @@ def compile_elementary():
     q = data[:, 0]
     δq = data[:, 1]
 
-    # Define n,δn function
-    def n_δn(q, δq):
-        n = q / 1.602e-19
-        δn = n * (δq/q)
-        return n, δn
-
     # Calculate n,δn (unitless)
     n, δn = n_δn(q, δq)
 
@@ -153,17 +151,19 @@ def compile_elementary():
     np.savetxt("oil_drop/data_elementary.txt", data, header=head, encoding='utf-8-sig')
 
 
+
+
+
+
+
+
 # Graphing functions
-def plot_histogram(filename: str, 
+def plot_histogram(data, 
                    intermediate_tick_count=1, 
                    force_max_x=None,
                    force_min_x=None,
                    show_minor_ticks=False):
 
-    # Load and modify data
-    data = np.loadtxt(filename, skiprows=1, encoding='utf-8-sig')
-    data /= 1.602176634  # Convert Q -> N*e
-    
     # Determine max q
     max_q = max(data) if len(data.shape) == 1 else max(data[:, 0])
     if isinstance(force_max_x, (int, float)):
@@ -198,7 +198,8 @@ def plot_histogram(filename: str,
     plt.xticks(x_major_ticks, x_major_labels)
     plt.gca().grid(which='minor', alpha=0.0)
     plt.gca().grid(which='major', alpha=1.0)
-    [plt.gca().annotate(f"{int(y)}", xy=(x, y+10), xytext=(x, y+1+10), ha='center', va='center') for x, y in quantity_labels]
+    DY = -0.5  # 10
+    [plt.gca().annotate(f"{int(y)}", xy=(x, y+DY), xytext=(x, y+1+DY), ha='center', va='center') for x, y in quantity_labels]
     plt.gca().axes.get_yaxis().set_ticks([])
 
     # Show plot
@@ -206,11 +207,16 @@ def plot_histogram(filename: str,
     plt.show()
 
 
-# plot_histogram("oil_drop/compiled_data.txt", 
+# data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
+# data /= 1.602176634  # Convert Q -> N*e
+
+# plot_histogram(data, 
 #                intermediate_tick_count=5,
 #                force_min_x=0,
 #                force_max_x=5,
 #                show_minor_ticks=True)
+
+
 
 
 compile_v()
@@ -221,6 +227,13 @@ compile_elementary()
 
 
 
+
+data = np.loadtxt("oil_drop/data_elementary.txt", skiprows=1, encoding='utf-8-sig')[:,0]
+plot_histogram(data, 
+               intermediate_tick_count=5,
+               force_min_x=0,
+               force_max_x=6,
+               show_minor_ticks=True)
 
 
 
