@@ -155,10 +155,8 @@ def compile_elementary():
 
 
 
-
-
 # Graphing functions
-def plot_histogram(data, 
+def plot_histogram(plt: plt, data, 
                    intermediate_tick_count=1, 
                    force_max_x=None,
                    force_min_x=None,
@@ -183,12 +181,12 @@ def plot_histogram(data,
     x_minor_ticks = [Δx + i*Δq for i in range(int(upper))][1:]
     x_minor_labels = [f"+{np.mod(2*i-1, 2*intermediate_tick_count)}/{2*intermediate_tick_count}" for i in range(int(upper))][1:]
     x_major_ticks = [i for i in range(int(max_q)+1)]
-    x_major_labels = [f"{i}" for i in range(int(max_q)+1)]
+    x_major_labels = [f"{i}e-19" for i in range(int(max_q)+1)]
     quantity_labels = ((histogram_list[i] + Δq/2, int(plt.gca().patches[i].get_height())) for i in range(1, len(histogram_list)-1))
 
     # Set up plot
     plt.title(f"Charge Distribution")
-    plt.xlabel(f"Q (e) [Δq=1/{intermediate_tick_count}]")
+    plt.xlabel(f"Q [Δq=1/{intermediate_tick_count}]")
     plt.ylabel('Quantity of Drops')
 
     # Plot histogram with thin black borders on each bar
@@ -204,34 +202,33 @@ def plot_histogram(data,
 
     # Show plot
     plt.xlim(min_q + Δx, max_q - Δx)
-    plt.show()
 
 
 
 
 
-# # Elementary charge data
-# data = np.loadtxt("oil_drop/data_elementary.txt", skiprows=1, encoding='utf-8-sig')[:,0]
-# plot_histogram(data, 
-#                intermediate_tick_count=3,
-#                force_min_x=0,
-#                force_max_x=6,
-#                show_minor_ticks=True, 
-#                dy=-0.8)
+# Experimental charge data
+data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
+data *= 1e19
+plot_histogram(plt, data, 
+               intermediate_tick_count=3,
+               force_min_x=0,
+               force_max_x=None,
+               show_minor_ticks=False, 
+               dy=-0.8)
+plt.show()
 
 
-
-
-# # Compiled data
-# data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
+# Compiled charge data
+data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
 # data /= 1.602176634  # Convert Q -> N*e
-# plot_histogram(data, 
-#                intermediate_tick_count=5,
-#                force_min_x=0,
-#                force_max_x=5,
-#                show_minor_ticks=True,
-#                dy=8)
-
+plot_histogram(plt, data, 
+               intermediate_tick_count=5,
+               force_min_x=0,
+               force_max_x=10,
+               show_minor_ticks=False,
+               dy=8)
+plt.show()
 
 
 
@@ -248,102 +245,133 @@ def plot_histogram(data,
 # Load and modify data
 
 
-# Define weighted mean and standard deviation function
-def calculate_weighted_params(x_data, mu, s):
+# # Define weighted mean and standard deviation function
+# def calculate_weighted_params(x_data, mu, s):
 
-    # Calculate a weight proportional to the CDF of the z-score about mu
-    p = 1 - erf((abs(x_data - mu)/s)/np.sqrt(2))
-    p /= sum(p)  # Normalize p
-    N = len(x_data)
+#     # Calculate a weight proportional to the CDF of the z-score about mu
+#     p = 1 - erf((abs(x_data - mu)/s)/np.sqrt(2))
+#     p /= sum(p)  # Normalize p
+#     N = len(x_data)
     
-    # Calculate weighted mean and standard deviation
-    weighted_mean = sum(x_data * p)
-    weighted_std = np.sqrt(N/(N-1)) * np.sqrt(sum(p * (x_data - weighted_mean)**2))
+#     # Calculate weighted mean and standard deviation
+#     weighted_mean = sum(x_data * p)
+#     weighted_std = np.sqrt(N/(N-1)) * np.sqrt(sum(p * (x_data - weighted_mean)**2))
 
-    # Return weighted mean and standard deviation
-    return weighted_mean, weighted_std
+#     # Return weighted mean and standard deviation
+#     return weighted_mean, weighted_std
 
-def find_equilibrium_params(x_data, MU, plot=False):
+# def find_equilibrium_params(x_data, MU, plot=False):
 
-    # Find equilibrium params
-    SCOPE_SPACE = np.linspace(0.05, 1, 1000)[1:]
-    mu_list = []
-    cs_list = []
-    for scope_standard_deviation in SCOPE_SPACE:
-        _mu, _sigma = calculate_weighted_params(x_data, MU, scope_standard_deviation)
-        mu_list.append(_mu)
-        cs_list.append(_sigma)
+#     # Find equilibrium params
+#     SCOPE_SPACE = np.linspace(0.05, 1, 1000)[1:]
+#     mu_list = []
+#     cs_list = []
+#     for scope_standard_deviation in SCOPE_SPACE:
+#         _mu, _sigma = calculate_weighted_params(x_data, MU, scope_standard_deviation)
+#         mu_list.append(_mu)
+#         cs_list.append(_sigma)
 
-    # Find zeros of d²mu_list and d²cs_list
-    mu_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(mu_list)))))[0]
-    cs_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(cs_list)))))[0]
+#     # Find zeros of d²mu_list and d²cs_list
+#     mu_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(mu_list)))))[0]
+#     cs_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(cs_list)))))[0]
 
-    # Print zeros
-    # print("mu zeros: s=", SCOPE_SPACE[mu_zeros])
-    # print("cs zeros: s=", SCOPE_SPACE[cs_zeros])
+#     # Print zeros
+#     # print("mu zeros: s=", SCOPE_SPACE[mu_zeros])
+#     # print("cs zeros: s=", SCOPE_SPACE[cs_zeros])
 
-    # Find a pair of zeros from mu_zeros, cs_zeros that minimizes the difference
-    min_difference = 1e10
-    min_mu, min_s = 0, 0
-    for i in mu_zeros:
-        for j in cs_zeros:
-            if abs(SCOPE_SPACE[i] - SCOPE_SPACE[j]) < min_difference:
-                min_difference = abs(SCOPE_SPACE[i] - SCOPE_SPACE[j])
-                min_mu = SCOPE_SPACE[i]
-                min_s = SCOPE_SPACE[j]
+#     # Find a pair of zeros from mu_zeros, cs_zeros that minimizes the difference
+#     min_difference = 1e10
+#     min_mu, min_s = 0, 0
+#     for i in mu_zeros:
+#         for j in cs_zeros:
+#             if abs(SCOPE_SPACE[i] - SCOPE_SPACE[j]) < min_difference:
+#                 min_difference = abs(SCOPE_SPACE[i] - SCOPE_SPACE[j])
+#                 min_mu = SCOPE_SPACE[i]
+#                 min_s = SCOPE_SPACE[j]
 
-    # Print the 2 different minimizers
-    μ1 = mu_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
-    σ1 = cs_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
-    s1 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_mu)[0][0]]
-    # print(f"{μ1=}, {σ1=}, {s1=}")
-    μ2 = mu_list[np.where(SCOPE_SPACE == min_s)[0][0]]
-    σ2 = cs_list[np.where(SCOPE_SPACE == min_s)[0][0]]
-    s2 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_s)[0][0]]
-    # print(f"{μ2=}, {σ2=}, {s2=}")
+#     # Print the 2 different minimizers
+#     μ1 = mu_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
+#     σ1 = cs_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
+#     s1 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_mu)[0][0]]
+#     # print(f"{μ1=}, {σ1=}, {s1=}")
+#     μ2 = mu_list[np.where(SCOPE_SPACE == min_s)[0][0]]
+#     σ2 = cs_list[np.where(SCOPE_SPACE == min_s)[0][0]]
+#     s2 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_s)[0][0]]
+#     # print(f"{μ2=}, {σ2=}, {s2=}")
 
-    # If plot=True, plot mu_list and cs_list vs s_list
-    if plot:
+#     # If plot=True, plot mu_list and cs_list vs s_list
+#     if plot:
 
-        # Create a figure with 2 subplots on top of each other who share the x-axis
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+#         # Create a figure with 2 subplots on top of each other who share the x-axis
+#         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 
-        # Normalize mu_list and its derivative
-        d_mu_list = np.gradient(mu_list)
-        mu_list /= max(abs(np.array(mu_list)))
-        d_mu_list /= max(abs(d_mu_list))
+#         # Normalize mu_list and its derivative
+#         d_mu_list = np.gradient(mu_list)
+#         mu_list /= max(abs(np.array(mu_list)))
+#         d_mu_list /= max(abs(d_mu_list))
 
-        # Plot mu_list vs s_list
-        ax1.set_title("Weighted Mean vs. Scope Standard Deviation")
-        ax1.plot(SCOPE_SPACE, mu_list, label="μ")
-        ax1.plot(SCOPE_SPACE, d_mu_list, label="dμ/ds")
-        ax1.vlines(min_s, min(min(mu_list), min(d_mu_list)), max(max(mu_list), max(d_mu_list)), colors='r', linestyles='dashed')
-        ax1.vlines(min_mu, min(min(mu_list), min(d_mu_list)), max(max(mu_list), max(d_mu_list)), colors='b', linestyles='dashed')
+#         # Plot mu_list vs s_list
+#         ax1.set_title("Weighted Mean vs. Scope Standard Deviation")
+#         ax1.plot(SCOPE_SPACE, mu_list, label="μ")
+#         ax1.plot(SCOPE_SPACE, d_mu_list, label="dμ/ds")
+#         ax1.vlines(min_s, min(min(mu_list), min(d_mu_list)), max(max(mu_list), max(d_mu_list)), colors='r', linestyles='dashed')
+#         ax1.vlines(min_mu, min(min(mu_list), min(d_mu_list)), max(max(mu_list), max(d_mu_list)), colors='b', linestyles='dashed')
 
-        # Normalize mu_list and its derivative
-        d_cs_list = np.gradient(cs_list)
-        cs_list /= max(abs(np.array(cs_list)))
-        d_cs_list /= max(abs(d_cs_list))
+#         # Normalize mu_list and its derivative
+#         d_cs_list = np.gradient(cs_list)
+#         cs_list /= max(abs(np.array(cs_list)))
+#         d_cs_list /= max(abs(d_cs_list))
 
-        # Plot cs_list vs s_list
-        ax2.set_title("Weighted Standard Deviation vs. Scope Standard Deviation")
-        ax2.plot(SCOPE_SPACE, cs_list, label="σ")
-        ax2.plot(SCOPE_SPACE, d_cs_list, label="dσ/ds")
-        ax2.vlines(min_s, min(min(cs_list), min(d_cs_list)), max(max(cs_list), max(d_cs_list)), colors='r', linestyles='dashed')
-        ax2.vlines(min_mu, min(min(cs_list), min(d_cs_list)), max(max(cs_list), max(d_cs_list)), colors='b', linestyles='dashed')
+#         # Plot cs_list vs s_list
+#         ax2.set_title("Weighted Standard Deviation vs. Scope Standard Deviation")
+#         ax2.plot(SCOPE_SPACE, cs_list, label="σ")
+#         ax2.plot(SCOPE_SPACE, d_cs_list, label="dσ/ds")
+#         ax2.vlines(min_s, min(min(cs_list), min(d_cs_list)), max(max(cs_list), max(d_cs_list)), colors='r', linestyles='dashed')
+#         ax2.vlines(min_mu, min(min(cs_list), min(d_cs_list)), max(max(cs_list), max(d_cs_list)), colors='b', linestyles='dashed')
 
-        # Show plot
-        plt.legend()
-        plt.show()
+#         # Show plot
+#         plt.legend()
+#         plt.show()
 
-    # Return the 2 different minimizers
-    return (μ1, σ1, s1), (μ2, σ2, s2)
+#     # Return the 2 different minimizers
+#     return (μ1, σ1, s1), (μ2, σ2, s2)
 
 
 
-data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
-data /= 1.602176634  # Convert Q -> N*e
 
-# Find equilibrium params
-G1, G2 = find_equilibrium_params(data, 2, plot=True)
-print(f"MU=2: {G1, G2}")
+
+
+
+# # Experimental charge data
+# data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
+# data *= 1e19
+# plot_histogram(plt, data, 
+#                intermediate_tick_count=5,
+#                force_min_x=0,
+#                force_max_x=6,
+#                show_minor_ticks=False, 
+#                dy=-0.8)
+
+# # Find equilibrium params
+# e_data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
+# e_data /= 1.602176634  # Convert Q -> N*e
+
+# # Plot equilibrium params
+# for k in range(1, 5):
+#     X = np.linspace(0, 10, 1000)
+#     G1, G2 = find_equilibrium_params(e_data, k, plot=False)
+
+#     # Graph 1
+#     MU = G1[0] * 1.602176634
+#     S = G1[1] * 1.602176634
+#     A = 1/(np.sqrt(2*np.pi) * S)
+#     plt.plot(X, A*np.exp(-(X - MU)**2/(2*S**2)), label="Gaussian 1", color='r')
+
+#     # Graph 2
+#     MU = G2[0] * 1.602176634
+#     S = G2[1] * 1.602176634
+#     A = 1/(np.sqrt(2*np.pi) * S)
+#     plt.plot(X, A*np.exp(-(X - MU)**2/(2*S**2)), label="Gaussian 2", color='b')
+
+# # Show plot
+# plt.show()
