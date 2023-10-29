@@ -368,33 +368,33 @@ def machine_spectroscopy():
 
 
 
-    # # Import machine spectrometer data
-    # data = np.loadtxt('./atomic_spectra/H_high_on.txt', skiprows=1)
-
-    # # Split data into wavelength and intensity
-    # wavelengths = data[:,0]
-    # intensities = data[:,1]
-
-    # # Plot the emission spectrum
-    # ax1.title.set_text("Emission Spectrum of Hydrogen")
-    # ax1.set_xlabel("Wavelength (nm)")
-    # ax1.set_xlim(380, 780)
-    # plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
-
-
-
     # Import machine spectrometer data
-    data = np.loadtxt('./atomic_spectra/He.txt', skiprows=1)
+    data = np.loadtxt('./atomic_spectra/H_high_on.txt', skiprows=1)
 
     # Split data into wavelength and intensity
     wavelengths = data[:,0]
     intensities = data[:,1]
 
     # Plot the emission spectrum
-    ax1.title.set_text("Emission Spectrum of Helium")
+    ax1.title.set_text("Emission Spectrum of Hydrogen")
     ax1.set_xlabel("Wavelength (nm)")
     ax1.set_xlim(380, 780)
     plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
+
+
+
+    # # Import machine spectrometer data
+    # data = np.loadtxt('./atomic_spectra/He.txt', skiprows=1)
+
+    # # Split data into wavelength and intensity
+    # wavelengths = data[:,0]
+    # intensities = data[:,1]
+
+    # # Plot the emission spectrum
+    # ax1.title.set_text("Emission Spectrum of Helium")
+    # ax1.set_xlabel("Wavelength (nm)")
+    # ax1.set_xlim(380, 780)
+    # plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
 
 
 
@@ -417,5 +417,5 @@ def machine_spectroscopy():
 
 if __name__ == "__main__":
     #manual_spectroscopy()
-    #machine_spectroscopy()
+    machine_spectroscopy()
     pass
