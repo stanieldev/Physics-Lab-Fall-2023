@@ -162,10 +162,11 @@ def plot_colors(plot: plt, orders: list[int], angles: list[float], colors: list[
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((color_data[:, 1] - np.mean(color_data[:, 1]))**2)
         r_squared = 1 - (ss_res / ss_tot)
-        plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = f("s", param[0], param_error[0]) + " " + r2(r_squared), color = selected_color.toRGB())
+        #plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = f("s", param[0], param_error[0]) + " " + r2(r_squared), color = selected_color.toRGB())
+        plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = "", color = selected_color.toRGB())
         
     # Finalize plot
-    plot.legend()
+    # plot.legend()
 
 def plot_wavelengths(plot: plt, orders: list[int], angles: list[float], colors: list[Color]):
 
@@ -250,12 +251,42 @@ def plot_emission_spectrum(plot: plt, λ: np.ndarray, intensity: np.ndarray, sig
 
 
 
+def temp():
+    # Create figure with 4 subplots in a 2x2 grid
+    fig, ax4 = plt.subplots(1, 1)
+    fig.patch.set_facecolor((10.6/255, 12.9/255, 17.3/255))
+    fig.subplots_adjust(hspace=0.35)
+
+    # Import manual spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
+
+    # Modify data to proper sets
+    diffraction_angles = data[0] - data[0][0]  # Set first angle to 0
+    diffraction_angles = np.sin(diffraction_angles * np.pi / 180)  # Convert to sin(angle)
+    diffraction_orders = data[3]  # Get diffraction order
+    diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
+
+    # Calculate wavelengths
+    ordered_pairs = calculate_wavelengths(diffraction_orders, diffraction_angles, diffraction_colors)
+
+    # Find the wavelengths of the Balmer series
+    n = [6, 5, 4, 3]
+    λ = np.array([i[0][0] for i in ordered_pairs])
+    dλ = np.array([i[1][0] for i in ordered_pairs])
+
+    # Plot 1/λ vs 1/n²
+    plot_rydberg_constant(ax4, n, λ, dλ)
+    plt.show()
+
+
+
+
 # Collections of data
 def manual_spectroscopy():
 
     # Create figure with 4 subplots in a 2x2 grid
     fig, ((ax1, ax3), (ax2, ax4)) = plt.subplots(2, 2)
-    fig.patch.set_facecolor('grey')
+    fig.patch.set_facecolor((10.6/255, 12.9/255, 17.3/255))
     fig.subplots_adjust(hspace=0.35)
 
 
@@ -345,7 +376,7 @@ def machine_spectroscopy():
 
     # Create figure with 2 subplots
     fig, (ax1) = plt.subplots(1,1)
-    fig.patch.set_facecolor('grey')
+    fig.patch.set_facecolor((10.6/255, 12.9/255, 17.3/255))
     fig.subplots_adjust(hspace=0.35)
 
 
@@ -368,33 +399,33 @@ def machine_spectroscopy():
 
 
 
-    # # Import machine spectrometer data
-    # data = np.loadtxt('./atomic_spectra/H_high_on.txt', skiprows=1)
-
-    # # Split data into wavelength and intensity
-    # wavelengths = data[:,0]
-    # intensities = data[:,1]
-
-    # # Plot the emission spectrum
-    # ax1.title.set_text("Emission Spectrum of Hydrogen")
-    # ax1.set_xlabel("Wavelength (nm)")
-    # ax1.set_xlim(380, 780)
-    # plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
-
-
-
     # Import machine spectrometer data
-    data = np.loadtxt('./atomic_spectra/He.txt', skiprows=1)
+    data = np.loadtxt('./atomic_spectra/H_high_on.txt', skiprows=1)
 
     # Split data into wavelength and intensity
     wavelengths = data[:,0]
     intensities = data[:,1]
 
     # Plot the emission spectrum
-    ax1.title.set_text("Emission Spectrum of Helium")
+    ax1.title.set_text("Emission Spectrum of Hydrogen")
     ax1.set_xlabel("Wavelength (nm)")
     ax1.set_xlim(380, 780)
     plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
+
+
+
+    # # Import machine spectrometer data
+    # data = np.loadtxt('./atomic_spectra/He.txt', skiprows=1)
+
+    # # Split data into wavelength and intensity
+    # wavelengths = data[:,0]
+    # intensities = data[:,1]
+
+    # # Plot the emission spectrum
+    # ax1.title.set_text("Emission Spectrum of Helium")
+    # ax1.set_xlabel("Wavelength (nm)")
+    # ax1.set_xlim(380, 780)
+    # plot_emission_spectrum(ax1, wavelengths, intensities, sigma=lambda x: np.sqrt(x))
 
 
 
@@ -415,7 +446,17 @@ def machine_spectroscopy():
 
     plt.show()
 
+
 if __name__ == "__main__":
-    #manual_spectroscopy()
-    #machine_spectroscopy()
+    plt.rcParams['text.color'] = 'white'
+    # set tickmarks and labels to white
+    plt.rcParams['xtick.color'] = 'white'
+    plt.rcParams['ytick.color'] = 'white'
+    # set axes names to white
+    plt.rcParams['axes.labelcolor'] = 'white'
+    # set legend color to white
+    plt.rcParams['legend.facecolor'] = (10.6/255, 12.9/255, 17.3/255)
+    
+    # manual_spectroscopy()
+    machine_spectroscopy()
     pass

@@ -1,6 +1,20 @@
+# Import necessary libraries
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erf
+
+# Fit a gaussian to the data
+from scipy.optimize import curve_fit
+def gaussian(x, A, μ, σ):
+    return A*np.exp(-(x - μ)**2/(2*σ**2))
+
+# Create a special function for the gaussian
+def damped_gaussian(x, A, b, e, σ):
+    def decay(n): return np.exp(-b*e*(n-1))
+    def gauss(n): return np.exp(-(x - e*n)**2/(2*σ**2))
+    return A * sum([decay(i) * gauss(i) for i in range(1, 20)])
+
+
 
 # Constants
 η = 1.85e-5    # Pa s
@@ -152,9 +166,6 @@ def compile_elementary():
 
 
 
-
-
-
 # Graphing functions
 def plot_histogram(plt: plt, data, 
                    intermediate_tick_count=1, 
@@ -163,13 +174,9 @@ def plot_histogram(plt: plt, data,
                    show_minor_ticks=False,
                    dy=0.0):
 
-    # Determine max q
-    max_q = max(data) if len(data.shape) == 1 else max(data[:, 0])
-    if isinstance(force_max_x, (int, float)):
-        max_q = force_max_x
-
-    # Determine min q
+    # Determine min-max q
     min_q = force_min_x if isinstance(force_min_x, (int, float)) else 0
+    max_q = force_max_x if isinstance(force_max_x, (int, float)) else (max(data) if len(data.shape) == 1 else max(data[:, 0]))
 
     # Better plot formatting
     Δq = 1/intermediate_tick_count
@@ -205,29 +212,92 @@ def plot_histogram(plt: plt, data,
 
 
 
+# Statistical analysis functions
+def frequency_list(data, Ndx, maxval=2.5):
+
+    # Calculate dx
+    Δx = maxval/Ndx
+    histogram_list = [i*Δx for i in range(0, Ndx + 1)]
+    
+    # Calculate frequency of each charge in each bin
+    frequency_list = []
+    for i in range(Ndx):
+        frequency_list.append(len(data[(data >= histogram_list[i])]) - len(data[(data >= histogram_list[i+1])]))
+    frequency_list.append(0)  # Add 0 to the end of the list for values >= maxval
+    frequency_list = np.array(frequency_list)
+
+    # Return frequency list and histogram list
+    return frequency_list, [i + Δx/2 for i in histogram_list]
+
+def find_gaussian(data, Ndx, maxval):
+
+    # Create a frequency list of the data
+    freq, hist = frequency_list(data, Ndx, maxval)
+
+    # Fit gaussian to data
+    popt, pcov = curve_fit(gaussian, hist, freq, p0=[1, 1, 1])
+
+    # Return gaussian parameters
+    return popt
+
+def find_damped_gaussian(data, Ndx, maxval):
+
+    # Create a frequency list of the data
+    freq, hist = frequency_list(data, Ndx, maxval=maxval)
+
+    # Fit gaussian to data
+    popt, pcov = curve_fit(damped_gaussian, hist, freq, p0=[max(freq), 0.6, 1.6, 0.25])
+
+    # Return gaussian parameters
+    return popt
 
 
-# Experimental charge data
-data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
-data *= 1e19
-plot_histogram(plt, data, 
-               intermediate_tick_count=3,
-               force_min_x=0,
-               force_max_x=None,
-               show_minor_ticks=False, 
-               dy=-0.8)
-plt.show()
+
+# # Experimental charge data
+# DIVISIONS = 8
+# SPACE = np.linspace(0, 2.5, 1000)
+# data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
+# data = data[data <= 2.5] * 1e19
+# plot_histogram(plt, data, 
+#                intermediate_tick_count=DIVISIONS,
+#                force_min_x=0,
+#                force_max_x=3,
+#                show_minor_ticks=False, 
+#                dy=-0.8)
+# params = find_gaussian(data, int(DIVISIONS * 2.5), 2.5)
+# plt.plot(SPACE, gaussian(SPACE, *params))
+# print(f"μ: {params[1]}, σ: {params[2]}")
+# plt.show()
+
+
+# # Experimental charge data
+# data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
+# data *= 1e19
+# plot_histogram(plt, data, 
+#                intermediate_tick_count=3,
+#                force_min_x=0,
+#                force_max_x=None,
+#                show_minor_ticks=False, 
+#                dy=-0.8)
+# plt.show()
+
 
 
 # Compiled charge data
+N=3
 data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
-# data /= 1.602176634  # Convert Q -> N*e
 plot_histogram(plt, data, 
-               intermediate_tick_count=5,
+               intermediate_tick_count=N,
                force_min_x=0,
                force_max_x=10,
-               show_minor_ticks=False,
+               show_minor_ticks=True,
                dy=8)
+
+# Fit the damped gaussian to the data
+params = find_damped_gaussian(data, 50*N, maxval=50)
+SPACE = np.linspace(0, 10, 1000)
+plt.plot(SPACE, damped_gaussian(SPACE, *params))
+print(f"A: {params[0]}, b: {params[1]}, e: {params[2]}, σ: {params[3]}")
 plt.show()
 
 
@@ -240,9 +310,6 @@ plt.show()
 
 
 
-
-
-# Load and modify data
 
 
 # # Define weighted mean and standard deviation function
@@ -275,10 +342,6 @@ plt.show()
 #     mu_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(mu_list)))))[0]
 #     cs_zeros = np.where(np.diff(np.sign(np.gradient(np.gradient(cs_list)))))[0]
 
-#     # Print zeros
-#     # print("mu zeros: s=", SCOPE_SPACE[mu_zeros])
-#     # print("cs zeros: s=", SCOPE_SPACE[cs_zeros])
-
 #     # Find a pair of zeros from mu_zeros, cs_zeros that minimizes the difference
 #     min_difference = 1e10
 #     min_mu, min_s = 0, 0
@@ -293,11 +356,9 @@ plt.show()
 #     μ1 = mu_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
 #     σ1 = cs_list[np.where(SCOPE_SPACE == min_mu)[0][0]]
 #     s1 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_mu)[0][0]]
-#     # print(f"{μ1=}, {σ1=}, {s1=}")
 #     μ2 = mu_list[np.where(SCOPE_SPACE == min_s)[0][0]]
 #     σ2 = cs_list[np.where(SCOPE_SPACE == min_s)[0][0]]
 #     s2 = SCOPE_SPACE[np.where(SCOPE_SPACE == min_s)[0][0]]
-#     # print(f"{μ2=}, {σ2=}, {s2=}")
 
 #     # If plot=True, plot mu_list and cs_list vs s_list
 #     if plot:
@@ -339,22 +400,21 @@ plt.show()
 
 
 
-
-
-
-# # Experimental charge data
-# data = np.loadtxt("oil_drop/data_charges_corrected.txt", skiprows=1, encoding='utf-8-sig')[:,0]
-# data *= 1e19
-# plot_histogram(plt, data, 
-#                intermediate_tick_count=5,
-#                force_min_x=0,
-#                force_max_x=6,
-#                show_minor_ticks=False, 
-#                dy=-0.8)
-
 # # Find equilibrium params
 # e_data = np.loadtxt("oil_drop/compiled_data.txt", skiprows=1, encoding='utf-8-sig')
 # e_data /= 1.602176634  # Convert Q -> N*e
+
+# # Plot histogram
+# N=5
+# plot_histogram(plt, e_data,
+#                 intermediate_tick_count=N,
+#                 force_min_x=0,
+#                 force_max_x=10,
+#                 show_minor_ticks=False,
+#                 dy=8)
+
+# # Frequency list
+# f, d = frequency_list(e_data, N * 10, maxval=10)
 
 # # Plot equilibrium params
 # for k in range(1, 5):
@@ -362,15 +422,15 @@ plt.show()
 #     G1, G2 = find_equilibrium_params(e_data, k, plot=False)
 
 #     # Graph 1
-#     MU = G1[0] * 1.602176634
-#     S = G1[1] * 1.602176634
-#     A = 1/(np.sqrt(2*np.pi) * S)
+#     MU = G1[0]
+#     S = G1[1]
+#     A = f[int(MU * N)]
 #     plt.plot(X, A*np.exp(-(X - MU)**2/(2*S**2)), label="Gaussian 1", color='r')
 
 #     # Graph 2
-#     MU = G2[0] * 1.602176634
-#     S = G2[1] * 1.602176634
-#     A = 1/(np.sqrt(2*np.pi) * S)
+#     MU = G2[0]
+#     S = G2[1]
+#     A = f[int(MU * N)]
 #     plt.plot(X, A*np.exp(-(X - MU)**2/(2*S**2)), label="Gaussian 2", color='b')
 
 # # Show plot
