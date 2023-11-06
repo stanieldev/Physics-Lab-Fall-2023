@@ -301,25 +301,25 @@ def main():
     # Plot style
     plt.style.use('dark_background')
 
-    plot_final_graph()
-    plt.show()
+    # plot_final_graph()
+    # plt.show()
 
 
 
     # # Plot the blue light data
-    # plot_file("photoelectric_effect/4358A_raw.txt", color="blue", gradient=True,
+    # plot_file("photoelectric_effect/4358A_raw.txt", color="blue", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
     # calc_file("photoelectric_effect/4358A_raw.txt")
     # plt.show()
 
     # # Plot the green light data
-    # plot_file("photoelectric_effect/5461A_raw.txt", color="green", gradient=True,
+    # plot_file("photoelectric_effect/5461A_raw.txt", color="green", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
     # calc_file("photoelectric_effect/5461A_raw.txt")
     # plt.show()
 
     # # Plot the yellow light data
-    # plot_file("photoelectric_effect/5779A_raw.txt", color="yellow", gradient=True,
+    # plot_file("photoelectric_effect/5779A_raw.txt", color="yellow", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
     # calc_file("photoelectric_effect/5779A_raw.txt")
     # plt.show()
