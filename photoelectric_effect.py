@@ -61,7 +61,7 @@ def ReLU_regression(data, print_results=True):
     points[:,1] -= current_offset    # Subtract current at endpoint from all currents
 
     # Find the best fit for the ReLU regression
-    popt, pcov = curve_fit(ReLU_zeroed, points[:,0], points[:,1], p0=[1, 0])
+    popt, pcov = curve_fit(ReLU_zeroed, points[:,0], points[:,1], p0=[1, -2])
 
     # Print the regression parameters
     if print_results:
@@ -114,7 +114,7 @@ def plot_datapoints(data, color):
 def plot_regression(data, color, model=ReLU):
 
     # Some pre-calculated values
-    SPACE = np.linspace(data[0,0], data[-1,0], 1000)
+    SPACE = np.linspace(-4.0, 4.0, 1000)
 
     # Calculate the regression
     if model == ReLU:
@@ -144,17 +144,27 @@ def plot_stopping_voltage(data, color, model):
 def plot_file(file, color="blue", gradient=False, show_points=True, show_regression=True, show_bound=False):
 
     # Import data and sort by voltage
-    data = np.loadtxt(file, skiprows=1); data[:,1] *= 10  # 10^-8 A to nA
-    data = data[data[:,0].argsort()]  # Sort by voltage
+    rough_data = np.loadtxt(file[:-4] + "_rough.txt", skiprows=1);  rough_data[:,1] *= 10  # 10^-8 A to nA
+    fine_data  = np.loadtxt(file[:-4] + "_fine.txt",  skiprows=1);  fine_data[:,1] *= 10  # 10^-8 A to nA
+    data = np.concatenate((rough_data, fine_data))
+
+    # Sort by voltage
+    fine_data = fine_data[fine_data[:,0].argsort()]
+    data = data[data[:,0].argsort()]
 
     # Converts the data to gradient if gradient is True
-    if gradient: data = merge_duplicates(data)
-    if gradient: data[:,1] = np.gradient(data[:,1], data[:,0])
+    if gradient:
+        fine_data = merge_duplicates(fine_data)
+        data = merge_duplicates(data)
+    if gradient:
+        fine_data[:,1] = np.gradient(fine_data[:,1], fine_data[:,0])
+        data[:,1] = np.gradient(data[:,1], data[:,0])
 
     # Set up graph
+    wavelength = (file.split("_")[1].split(".")[0])[-5:-1]
     plt.xlabel("Voltage (V)")
     plt.ylabel("Photocurrent (nA)") if not gradient else plt.ylabel("Photocurrent per Volt (nA/V)")
-    plt.title("Photocurrent vs. Voltage") if not gradient else plt.title("Change in Photocurrent vs. Voltage")
+    plt.title(f"Photocurrent vs. Voltage ({int(wavelength)/10}nm)") if not gradient else plt.title("Change in Photocurrent vs. Voltage")
 
     # Plot the data
     if show_points:
@@ -162,13 +172,13 @@ def plot_file(file, color="blue", gradient=False, show_points=True, show_regress
 
     # Plot the regression
     if show_regression:
-        if not gradient: plot_regression(data, color=color, model=ReLU)
-        elif gradient: plot_regression(data, color=color, model=sigmoid)
+        if not gradient: plot_regression(fine_data, color=color, model=ReLU)
+        elif gradient: plot_regression(fine_data, color=color, model=sigmoid)
 
     # Plot the stopping voltage
     if show_bound:
-        if not gradient: plot_stopping_voltage(data, color=color, model=ReLU)
-        elif gradient: plot_stopping_voltage(data, color=color, model=sigmoid)
+        if not gradient: plot_stopping_voltage(fine_data, color=color, model=ReLU)
+        elif gradient: plot_stopping_voltage(fine_data, color=color, model=sigmoid)
     
     # Make sure the legend is visible
     plt.legend(loc="upper left")
@@ -177,18 +187,25 @@ def plot_file(file, color="blue", gradient=False, show_points=True, show_regress
 def calc_file(file, print_results=True):
 
     # Import data and sort by voltage
-    data = np.loadtxt(file, skiprows=1); data[:,1] *= 10  # 10^-8 A to nA
-    data = data[data[:,0].argsort()]  # Sort by voltage
+    rough_data = np.loadtxt(file[:-4] + "_rough.txt", skiprows=1);  rough_data[:,1] *= 10  # 10^-8 A to nA
+    fine_data  = np.loadtxt(file[:-4] + "_fine.txt",  skiprows=1);  fine_data[:,1] *= 10  # 10^-8 A to nA
+    data = np.concatenate((rough_data, fine_data))
+
+    # Sort by voltage
+    fine_data = fine_data[fine_data[:,0].argsort()]
+    data = data[data[:,0].argsort()]
 
     # Calculate stopping voltage for ReLU regression
-    V_ReLU = StatNum(*calc_stopping_voltage(data, model=ReLU))
+    V_ReLU = StatNum(*calc_stopping_voltage(fine_data, model=ReLU))
 
     # Convert the data to its gradient
+    fine_data = merge_duplicates(fine_data)
     data = merge_duplicates(data)
+    fine_data[:,1] = np.gradient(fine_data[:,1], fine_data[:,0])
     data[:,1] = np.gradient(data[:,1], data[:,0])
 
     # Calculate stopping voltage for sigmoid regression
-    V_sigmoid = StatNum(*calc_stopping_voltage(data, model=sigmoid))
+    V_sigmoid = StatNum(*calc_stopping_voltage(fine_data, model=sigmoid))
 
     # Print a table with the data
     if print_results:
@@ -202,7 +219,7 @@ def calc_file(file, print_results=True):
     return V_ReLU, V_sigmoid
 
 # Calculate files function
-def calc_files(files: list, wavelengths: list, save_sigma=False):
+def calc_files(files: list, wavelengths: list, save_linear=True, save_sigma=False):
     save_lines = []
     for file, wavelength in zip(files, wavelengths):
 
@@ -210,23 +227,25 @@ def calc_files(files: list, wavelengths: list, save_sigma=False):
         a, b = calc_file(file, print_results=False)
 
         # Save the data
-        save_lines.append(f"{wavelength} {a.value} {a.uncertainty}")
+        if save_linear: save_lines.append(f"{wavelength} {a.value} {a.uncertainty}")
         if save_sigma: save_lines.append(f"{wavelength} {b.value} {b.uncertainty}")
 
     # Save the data to a file using numpy
-    np.savetxt("photoelectric_effect/stop_voltages.txt", np.array(save_lines), fmt="%s")
+    np.savetxt("photoelectric_effect/stop_voltages.txt", np.array(save_lines), fmt="%s", header="Wavelength (nm) | Stopping_Voltage (Vs) | Uncertainty (Vs)")
 
-        
+
+
 
 
 
 
 # Plot stopping voltage data vs frequency
-def plot_final_graph():
+def plot_final_graph(mergedata=False):
 
     # Load data from file
+
     data = np.loadtxt("photoelectric_effect/stop_voltages.txt", skiprows=1)
-    # data = merge_duplicates_3(data)
+    if mergedata: data = merge_duplicates_3(data)
 
     # Calculate useful lists
     frequencies = (C*10**9)/data[:,0]
@@ -301,42 +320,75 @@ def main():
     # Plot style
     plt.style.use('dark_background')
 
-    # plot_final_graph()
+    ### Individual Plots ###
+
+    # # Plot the higher ultraviolet data
+    # plot_file("photoelectric_effect/3131A.txt", color="magenta", gradient=False,
+    #           show_bound=True, show_regression=True, show_points=True)
+    # calc_file("photoelectric_effect/3131A.txt")
     # plt.show()
 
+    # # Plot the lower ultraviolet data
+    # plot_file("photoelectric_effect/3655A.txt", color="white", gradient=False,
+    #           show_bound=True, show_regression=True, show_points=True)
+    # calc_file("photoelectric_effect/3655A.txt")
+    # plt.show()
 
+    # # Plot the violet light data
+    # plot_file("photoelectric_effect/4047A.txt", color="purple", gradient=False,
+    #           show_bound=True, show_regression=True, show_points=True)
+    # calc_file("photoelectric_effect/4047A.txt")
+    # plt.show()
 
     # # Plot the blue light data
-    # plot_file("photoelectric_effect/4358A_raw.txt", color="blue", gradient=False,
+    # plot_file("photoelectric_effect/4358A.txt", color="blue", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
-    # calc_file("photoelectric_effect/4358A_raw.txt")
+    # calc_file("photoelectric_effect/4358A.txt")
     # plt.show()
 
     # # Plot the green light data
-    # plot_file("photoelectric_effect/5461A_raw.txt", color="green", gradient=False,
+    # plot_file("photoelectric_effect/5461A.txt", color="green", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
-    # calc_file("photoelectric_effect/5461A_raw.txt")
+    # calc_file("photoelectric_effect/5461A.txt")
     # plt.show()
 
     # # Plot the yellow light data
-    # plot_file("photoelectric_effect/5779A_raw.txt", color="yellow", gradient=False,
+    # plot_file("photoelectric_effect/5779A.txt", color="yellow", gradient=False,
     #           show_bound=True, show_regression=True, show_points=True)
-    # calc_file("photoelectric_effect/5779A_raw.txt")
+    # calc_file("photoelectric_effect/5779A.txt")
     # plt.show()
 
 
+    
 
-    # # Calculate all the files
-    # files_list = [
-    #     "photoelectric_effect/4358A_raw.txt",
-    #     "photoelectric_effect/5461A_raw.txt",
-    #     "photoelectric_effect/5779A_raw.txt",
-    #     "photoelectric_effect/5461A_low.txt",
-    #     "photoelectric_effect/5779A_low.txt",
-    # ]
-    # wavelength_list = [435.8, 546.1, 577.9, 546.1, 577.9]
+    
 
-    # calc_files(files_list, wavelength_list, save_sigma=True)
+
+
+
+
+
+
+    plot_final_graph(mergedata=False)
+    plt.show()
+
+
+    # Calculate all the files
+    files_list = [
+        "photoelectric_effect/3131A.txt",
+        "photoelectric_effect/3655A.txt",
+        "photoelectric_effect/4047A.txt",
+        "photoelectric_effect/4358A.txt",
+        "photoelectric_effect/5461A.txt",
+        "photoelectric_effect/5779A.txt",
+        # "photoelectric_effect/D0.3_4047A.txt",
+        # "photoelectric_effect/D0.5_4047A.txt",
+        # "photoelectric_effect/low_5461A.txt",
+        # "photoelectric_effect/low_5779A.txt"
+    ]
+    wavelength_list = [313.1, 365.5, 404.7, 435.8, 546.1, 577.9, 546.1, 577.9, 404.7, 404.7, 546.1, 577.9]
+
+    calc_files(files_list, wavelength_list, save_linear=True, save_sigma=True)
     
 
     
