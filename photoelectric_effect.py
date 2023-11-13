@@ -304,10 +304,10 @@ def plot_final_graph(mergedata=False):
     print( " Parameter |         Value         |      Uncertainty      |")
     print( "-----------|-----------------------|-----------------------|")
     print(f" h/e (V s) | {         H         } | {        dH         } |")
-    print(f"  φ/e (V)  | {         φ         } | {        dφ         } |")
+    print(f"  φ/e (V)  | {         φ         }   | {        dφ         }   |")
     print( "-----------|-----------------------|-----------------------|")
     print(f" h (eV s)  | {         H         } | {        dH         } |")
-    print(f"  φ (eV)   | {         φ         } | {        dφ         } |")
+    print(f"  φ (eV)   | {         φ         }   | {        dφ         }   |")
     print( "-----------|-----------------------|-----------------------|")
     print(f"hc (eV nm) | {        H_C        } | {       dH_C        } |")
 
