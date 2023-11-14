@@ -154,3 +154,8 @@ plot_diffraction_spectrum(angles, colors)
 plt.show()
 
 
+# Use lots of datapoints to find X, dX for each line
+# Take X/m for each line and θ, dθ for each wavelength
+# Use θ, dθ to find λ, dλ
+
+

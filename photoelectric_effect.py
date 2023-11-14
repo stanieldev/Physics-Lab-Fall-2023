@@ -164,7 +164,7 @@ def plot_file(file, color="blue", gradient=False, show_points=True, show_regress
     wavelength = (file.split("_")[1].split(".")[0])[-5:-1]
     plt.xlabel("Voltage (V)")
     plt.ylabel("Photocurrent (nA)") if not gradient else plt.ylabel("Photocurrent per Volt (nA/V)")
-    plt.title(f"Photocurrent vs. Voltage ({int(wavelength)/10}nm)") if not gradient else plt.title("Change in Photocurrent vs. Voltage")
+    # plt.title(f"Photocurrent vs. Voltage ({int(wavelength)/10}nm)") if not gradient else plt.title("Change in Photocurrent vs. Voltage")
 
     # Plot the data
     if show_points:
@@ -360,7 +360,14 @@ def main():
 
 
     
-
+    # Plot the violet light data
+    plot_file("photoelectric_effect/4047A.txt", color="red", gradient=False,
+              show_bound=True, show_regression=True, show_points=True)
+    plot_file("photoelectric_effect/D0.3_4047A.txt", color="green", gradient=False,
+              show_bound=True, show_regression=True, show_points=True)
+    plot_file("photoelectric_effect/D0.5_4047A.txt", color="blue", gradient=False,
+                show_bound=True, show_regression=True, show_points=True)
+    plt.show()
     
 
 
