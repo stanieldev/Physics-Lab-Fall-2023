@@ -33,11 +33,14 @@ def calibration_plot():
     ss_res = np.sum(residuals**2)
     ss_tot = np.sum((calibration[:,1] - np.mean(calibration[:,1]))**2)
     r_squared = 1 - (ss_res / ss_tot)
-    print(r_squared)
 
+    # Console output
+    print("Calibration:")
+    print(f"s¹ = {popt[0]} ± {np.sqrt(pcov[0][0])}")
+    print(f"r² = {r_squared}")
+
+    # Show the graph
     plt.grid()
-    print(popt[0])
-    print(np.sqrt(pcov[0][0]))
     plt.show()
 
 def xy_uniformity_plot(derivative=0):
@@ -97,6 +100,13 @@ def z_uniformity_plot():
     plt.plot(z_uniformity[:,0], [mean for i in range(len(z_uniformity[:,1]))])
     print(mean)
 
+    # Plot a parabola regression
+    def parabola(x, a, b, c):
+        return a * x**2 + b * x + c
+    popt, pcov = curve_fit(parabola, z_uniformity[:,0], z_uniformity[:,1])
+    plt.plot(z_uniformity[:,0], parabola(z_uniformity[:,0], *popt))
+    
+    # Finish graph
     plt.show()
 
 def e_over_m_plot():
@@ -135,15 +145,18 @@ def e_over_m_plot():
     r_squared = 1 - (ss_res / ss_tot)
     print(r_squared)
 
+    # Console output
+    print("Calibration:")
+    print(f"s² = {popt[0]} ± {np.sqrt(pcov[0][0])}")
+    print(f"r² = {r_squared}")
+
     # Show the graph
-    print(popt[0])
-    print(np.sqrt(pcov[0][0]))
     plt.grid()
     plt.show()
 
 
 
 calibration_plot()
-# xy_uniformity_plot(derivative=0)
-# z_uniformity_plot()
+xy_uniformity_plot(derivative=0)
+z_uniformity_plot()
 e_over_m_plot()
