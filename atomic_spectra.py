@@ -4,6 +4,10 @@ import scipy.optimize as opt
 from enum import Enum
 import numpy as np
 
+# Constants
+D = 1/600    # 600 lines per mm
+D = D*10**6  # Convert to nanometers^-1
+
 
 
 # Color enum
@@ -108,6 +112,7 @@ def calculate_wavelengths(orders: list[int], angles: list[float], colors: list[C
         ordered_pairs.append([D * param, D * param_error, selected_color])
 
     # Return ordered pairs
+    print(ordered_pairs)
     return ordered_pairs
 
 def calculate_around_region(data, λ, dλ=10) -> tuple[float, float]:
@@ -162,8 +167,12 @@ def plot_colors(plot: plt, orders: list[int], angles: list[float], colors: list[
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((color_data[:, 1] - np.mean(color_data[:, 1]))**2)
         r_squared = 1 - (ss_res / ss_tot)
-        #plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = f("s", param[0], param_error[0]) + " " + r2(r_squared), color = selected_color.toRGB())
+        # plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = f("s", param[0], param_error[0]) + " " + r2(r_squared), color = selected_color.toRGB())
         plot.plot(color_data[:, 0], linear_regression(color_data[:, 0], *param), label = "", color = selected_color.toRGB())
+        # plot.legend()
+        # Print color, slope, slope error, and r²
+        print(f"{selected_color.name}:\t{param[0]:.3f} +/- {param_error[0]:.3f}\t{r_squared*100:.4f}%")
+
         
     # Finalize plot
     # plot.legend()
@@ -193,7 +202,8 @@ def plot_rydberg_constant(plot: plt, n: list[float], λ: list[float], dλ: list[
     λ = np.array([1 / _λ for _λ in λ])
 
     # Plot points
-    plot.errorbar(n, λ, yerr=dλ, marker = 'o', linestyle = 'None', capsize=5, capthick=1)
+    colors = [Color.RGB(1/_λ) for _λ in λ]
+    [plot.errorbar(n, λ, yerr=dλ, marker = 'o', linestyle = 'None', capsize=5, capthick=1, color=color) for n, λ, dλ, color in zip(n, λ, dλ, colors)]
 
     # Define linear regression function
     def linear_regression(x, a, b): return a * x + b
@@ -213,7 +223,7 @@ def plot_rydberg_constant(plot: plt, n: list[float], λ: list[float], dλ: list[
     plot.set_facecolor('black')
 
     # Plot regression
-    plot.plot(n, linear_regression(n, *params), label = r2(r_squared))
+    plot.plot(n, linear_regression(n, *params), label = r2(r_squared), color='white')
 
     # Add statistics to legend
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -376,7 +386,6 @@ def machine_spectroscopy():
 
     # Create figure with 2 subplots
     fig, (ax1) = plt.subplots(1,1)
-    fig.patch.set_facecolor((10.6/255, 12.9/255, 17.3/255))
     fig.subplots_adjust(hspace=0.35)
 
 
@@ -448,15 +457,34 @@ def machine_spectroscopy():
 
 
 if __name__ == "__main__":
-    plt.rcParams['text.color'] = 'white'
-    # set tickmarks and labels to white
-    plt.rcParams['xtick.color'] = 'white'
-    plt.rcParams['ytick.color'] = 'white'
-    # set axes names to white
-    plt.rcParams['axes.labelcolor'] = 'white'
-    # set legend color to white
-    plt.rcParams['legend.facecolor'] = (10.6/255, 12.9/255, 17.3/255)
+    plt.style.use('dark_background')
+    plt.rcParams['axes.facecolor'] = '#181818'
+    # plt.rcParams['text.color'] = 'white'
+    # # set tickmarks and labels to white
+    # plt.rcParams['xtick.color'] = 'white'
+    # plt.rcParams['ytick.color'] = 'white'
+    # # set axes names to white
+    # plt.rcParams['axes.labelcolor'] = 'white'
+    # # set legend color to white
+    # plt.rcParams['legend.facecolor'] = (10.6/255, 12.9/255, 17.3/255)
+
+    fig, ax1 = plt.subplots(1, 1)    
+
+    # Import manual spectrometer data
+    data = np.loadtxt("./atomic_spectra/H_manual.txt", unpack=True)
+
+    # Modify data to proper sets
+    diffraction_angles = data[0] + data[1]/60  # Add arc seconds to degrees
+    diffraction_angles = diffraction_angles - diffraction_angles[0]  # Set first angle to 0
+    diffraction_colors = [Color(int(i)) for i in data[2]]  # Convert color index to Color enum
+
+    # Plot the measured diffraction pattern
+    ax1.title.set_text("Manually Measured Atomic Spectrum of Hydrogen")
+    plot_diffraction_spectrum(ax1, diffraction_angles, diffraction_colors)
+    plt.show()
+    
+
     
     # manual_spectroscopy()
-    machine_spectroscopy()
+    # machine_spectroscopy()
     pass
